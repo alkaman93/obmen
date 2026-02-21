@@ -1,7 +1,10 @@
+# NFT Exchange Bot для iPhone
+# ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ
+
 import requests
 import time
 import uuid
-from datetime import datetime 
+from datetime import datetime
 
 # ===== НАСТРОЙКИ =====
 TOKEN = "8487741416:AAHlISX26SKheAnTQJCv1rPHY-X0f3fWdI0"
@@ -93,12 +96,10 @@ def handle_message(message):
     username = message['from'].get('username', 'NoUsername')
     first_name = message['from'].get('first_name', 'Пользователь')
     
-    # Проверка на бан
     if user_id in banned_users:
         send_message(chat_id, "🚫 Вы забанены в боте!")
         return
     
-    # Запоминаем пользователя
     if user_id not in users:
         users[user_id] = {
             'username': username,
@@ -108,7 +109,6 @@ def handle_message(message):
             'temp_data': {}
         }
     
-    # ===== /start =====
     if text == '/start':
         welcome_text = """
 <b>👋 Приветствуем в проекте «Gift Exchange».</b>
@@ -119,7 +119,6 @@ def handle_message(message):
         """
         send_message(chat_id, welcome_text, main_keyboard())
     
-    # ===== ИНФОРМАЦИЯ =====
     elif text == "ℹ️ ИНФОРМАЦИЯ":
         info_text = """
 <b>📤 Наш проект создан для безопасного обмена NFT подарками среди пользователей Telegram'a.</b>
@@ -141,7 +140,6 @@ def handle_message(message):
         ]]
         send_inline_keyboard(chat_id, info_text, buttons)
     
-    # ===== КАК ПРОХОДИТ СДЕЛКА? =====
     elif text == "❓ КАК ПРОХОДИТ СДЕЛКА?":
         deal_text = """
 <b>❓ Как проходит сделка в Gift Exchange?</b>
@@ -167,7 +165,6 @@ def handle_message(message):
         ]]
         send_inline_keyboard(chat_id, deal_text, buttons)
     
-    # ===== ТЕХПОДДЕРЖКА =====
     elif text == "📞 ТЕХПОДДЕРЖКА":
         support_text = f"""
 <b>📞 Техническая поддержка:</b>
@@ -179,7 +176,6 @@ def handle_message(message):
         """
         send_message(chat_id, support_text, main_keyboard())
     
-    # ===== ТОП-15 =====
     elif text == "🏆 ТОП-15 ОБМЕНОВ":
         if not top_deals:
             send_message(chat_id, "<b>🏆 ТОП-15 ОБМЕНОВ ПОКА ПУСТ. БУДЬТЕ ПЕРВЫМИ!</b>")
@@ -190,13 +186,11 @@ def handle_message(message):
                 top_text += f"<b>{i}. {deal['user1']} ↔ {deal['user2']} — ${deal['amount']}</b>\n"
             send_message(chat_id, top_text)
     
-    # ===== СОЗДАТЬ СДЕЛКУ =====
     elif text == "📝 СОЗДАТЬ СДЕЛКУ":
         users[user_id]['state'] = 'waiting_username'
         users[user_id]['temp_data'] = {}
         send_message(chat_id, "<b>Введите @username второго участника сделки:</b>")
     
-    # ===== Обработка создания сделки =====
     elif user_id in users and users[user_id].get('state') == 'waiting_username':
         second_user = text.replace('@', '').strip()
         users[user_id]['temp_data']['second_user'] = second_user
@@ -254,8 +248,6 @@ def handle_message(message):
 
 <b>🔗 Ссылка на сделку:</b>
 https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
-
-<b>📝 Статус:</b> Ожидает принятия
             """
             
             buttons = [[
@@ -265,7 +257,6 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
             
             send_inline_keyboard(chat_id, deal_text, buttons)
             
-            # Уведомление второму участнику
             for uid, user_data in users.items():
                 if user_data.get('username') == second_user:
                     notify_text = f"""
@@ -292,7 +283,6 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
         except ValueError:
             send_message(chat_id, "<b>❌ Введите число!</b>")
     
-    # ===== Обработка start с deal =====
     elif text.startswith('/start deal_'):
         deal_id = text.replace('/start deal_', '')
         
@@ -320,7 +310,6 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
         else:
             send_message(chat_id, "<b>❌ Сделка не найдена!</b>", main_keyboard())
     
-    # ===== Админ-панель =====
     elif text == '/admin' and user_id == ADMIN_ID:
         admin_text = f"""
 <b>👨‍💼 ПАНЕЛЬ АДМИНИСТРАТОРА</b>
@@ -331,7 +320,6 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
         """
         send_inline_keyboard(chat_id, admin_text, admin_keyboard()['inline_keyboard'])
     
-    # ===== Админ: рассылка =====
     elif user_id == ADMIN_ID and users[user_id].get('state') == 'admin_broadcast':
         users[user_id]['state'] = None
         sent = 0
@@ -353,7 +341,6 @@ def handle_callback(callback):
     user_id = callback['from']['id']
     username = callback['from'].get('username', 'NoUsername')
     
-    # ===== ПРИНЯТЬ СДЕЛКУ =====
     if data.startswith('accept_'):
         deal_id = data.replace('accept_', '')
         
@@ -371,7 +358,6 @@ def handle_callback(callback):
             edit_message(chat_id, message_id, "<b>❌ Нельзя принять свою сделку!</b>")
             return
         
-        # Проверяем, что принимает нужный пользователь
         if username != deal['second_user'] and f"@{username}" != f"@{deal['second_user']}":
             edit_message(chat_id, message_id, "<b>❌ Эта сделка создана для другого пользователя!</b>")
             return
@@ -380,7 +366,6 @@ def handle_callback(callback):
         deal['participant_name'] = username
         deal['status'] = 'in_progress'
         
-        # Добавляем в топ-15
         if settings['min_amount'] <= deal['amount'] <= settings['max_amount']:
             top_deals.append({
                 'user1': f"@{deal['creator_name']}",
@@ -388,19 +373,17 @@ def handle_callback(callback):
                 'amount': deal['amount'],
                 'date': datetime.now().strftime("%Y-%m-%d")
             })
-            # Сортируем и оставляем топ-15
-            top_deals.sort(key=lambda x: x['amount'], reverse=True)
-            while len(top_deals) > 15:
-                top_deals.pop()
+            # Простая сортировка без global
+            sorted_top = sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:15]
+            top_deals.clear()
+            top_deals.extend(sorted_top)
         
-        # Уведомление создателю
         send_message(
             deal['creator_id'],
             f"<b>✅ @{username} ПРИНЯЛ СДЕЛКУ!</b>\n\n"
             f"<b>Передайте NFT менеджеру @{MANAGER}</b>"
         )
         
-        # Ответ принявшему
         edit_message(
             chat_id, 
             message_id, 
@@ -408,7 +391,6 @@ def handle_callback(callback):
             f"<b>Ожидайте передачи NFT менеджеру.</b>"
         )
     
-    # ===== ОТМЕНИТЬ СДЕЛКУ =====
     elif data.startswith('cancel_'):
         deal_id = data.replace('cancel_', '')
         
@@ -416,7 +398,6 @@ def handle_callback(callback):
             deals[deal_id]['status'] = 'cancelled'
             edit_message(chat_id, message_id, f"<b>❌ СДЕЛКА #{deal_id} ОТМЕНЕНА</b>")
     
-    # ===== ГЛАВНОЕ МЕНЮ =====
     elif data == "main_menu":
         welcome_text = """
 <b>👋 Приветствуем в проекте «Gift Exchange».</b>
@@ -427,7 +408,6 @@ def handle_callback(callback):
         """
         send_message(chat_id, welcome_text, main_keyboard())
     
-    # ===== КАК ПРОХОДИТ СДЕЛКА =====
     elif data == "how_deal":
         deal_text = """
 <b>❓ Как проходит сделка в Gift Exchange?</b>
@@ -450,7 +430,6 @@ def handle_callback(callback):
         """
         send_message(chat_id, deal_text)
     
-    # ===== АДМИН: СТАТИСТИКА =====
     elif data == "admin_stats" and user_id == ADMIN_ID:
         stats_text = f"""
 <b>📊 СТАТИСТИКА</b>
@@ -461,12 +440,10 @@ def handle_callback(callback):
         """
         edit_message(chat_id, message_id, stats_text, admin_keyboard())
     
-    # ===== АДМИН: РАССЫЛКА =====
     elif data == "admin_broadcast" and user_id == ADMIN_ID:
         users[user_id]['state'] = 'admin_broadcast'
         edit_message(chat_id, message_id, "<b>📢 Введите текст рассылки:</b>")
     
-    # ===== АДМИН: ВСЕ СДЕЛКИ =====
     elif data == "admin_deals" and user_id == ADMIN_ID:
         if not deals:
             edit_message(chat_id, message_id, "<b>📭 Нет сделок</b>", admin_keyboard())
@@ -479,7 +456,6 @@ def handle_callback(callback):
         
         edit_message(chat_id, message_id, deals_text, admin_keyboard())
     
-    # ===== АДМИН: ЗАКРЫТЬ =====
     elif data == "admin_close" and user_id == ADMIN_ID:
         welcome_text = """
 <b>👋 Приветствуем в проекте «Gift Exchange».</b>
@@ -495,7 +471,6 @@ def main():
     print("🚀 NFT Exchange Bot запущен!")
     print(f"🤖 Бот: @{BOT_USERNAME}")
     print(f"👑 Админ ID: {ADMIN_ID}")
-    print("✅ Нажми Ctrl+C для остановки")
     
     offset = 0
     while True:
