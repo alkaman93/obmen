@@ -1,9 +1,10 @@
 # NFT Exchange Bot для iPhone
-# ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ
+# ФИНАЛЬНАЯ ВЕРСИЯ - маленькие кнопки, исправленные тексты
 
 import requests
 import time
 import uuid
+import random
 from datetime import datetime
 
 # ===== НАСТРОЙКИ =====
@@ -23,13 +24,13 @@ settings = {
     "max_amount": 300
 }
 
-# ===== КЛАВИАТУРЫ =====
+# ===== КЛАВИАТУРЫ (МАЛЕНЬКИЕ КНОПКИ) =====
 def main_keyboard():
     return {
         "keyboard": [
-            [{"text": "📝 СОЗДАТЬ СДЕЛКУ"}],
-            [{"text": "❓ КАК ПРОХОДИТ СДЕЛКА?"}, {"text": "ℹ️ ИНФОРМАЦИЯ"}],
-            [{"text": "📞 ТЕХПОДДЕРЖКА"}, {"text": "🏆 ТОП-15 ОБМЕНОВ"}]
+            [{"text": "📝 Создать сделку"}],
+            [{"text": "❓ Как происходит сделка"}, {"text": "ℹ️ Информация"}],
+            [{"text": "📞 Техподдержка"}, {"text": "🏆 Топ-15 обменов"}]
         ],
         "resize_keyboard": True
     }
@@ -37,10 +38,11 @@ def main_keyboard():
 def admin_keyboard():
     return {
         "inline_keyboard": [
-            [{"text": "📊 СТАТИСТИКА", "callback_data": "admin_stats"}],
-            [{"text": "📢 РАССЫЛКА", "callback_data": "admin_broadcast"}],
-            [{"text": "📋 ВСЕ СДЕЛКИ", "callback_data": "admin_deals"}],
-            [{"text": "❌ ЗАКРЫТЬ", "callback_data": "admin_close"}]
+            [{"text": "📊 Статистика", "callback_data": "admin_stats"}],
+            [{"text": "📢 Рассылка", "callback_data": "admin_broadcast"}],
+            [{"text": "📋 Все сделки", "callback_data": "admin_deals"}],
+            [{"text": "🎲 Топ-15 (рандом)", "callback_data": "admin_random_top"}],
+            [{"text": "❌ Закрыть", "callback_data": "admin_close"}]
         ]
     }
 
@@ -88,6 +90,29 @@ def edit_message(chat_id, message_id, text, keyboard=None, parse_mode="HTML"):
     except:
         pass
 
+# ===== ГЕНЕРАЦИЯ ТОП-15 С РАНДОМНЫМИ ЮЗЕРАМИ =====
+def generate_random_top():
+    global top_deals
+    random_top = []
+    first_names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Henry", "Ivy", "Jack", 
+                   "Kevin", "Laura", "Mike", "Nancy", "Oliver", "Paul", "Quinn", "Rose", "Sam", "Tina"]
+    
+    for i in range(15):
+        amount = random.randint(100, 400)
+        user1 = f"user{random.randint(1000, 9999)}"
+        user2 = f"user{random.randint(1000, 9999)}"
+        random_top.append({
+            'user1': f"@{user1}",
+            'user2': f"@{user2}",
+            'amount': amount,
+            'date': datetime.now().strftime("%Y-%m-%d")
+        })
+    
+    # Сортируем по убыванию
+    random_top.sort(key=lambda x: x['amount'], reverse=True)
+    top_deals = random_top
+    return random_top
+
 # ===== ОБРАБОТКА СООБЩЕНИЙ =====
 def handle_message(message):
     chat_id = message['chat']['id']
@@ -119,7 +144,7 @@ def handle_message(message):
         """
         send_message(chat_id, welcome_text, main_keyboard())
     
-    elif text == "ℹ️ ИНФОРМАЦИЯ":
+    elif text == "ℹ️ Информация":
         info_text = """
 <b>📤 Наш проект создан для безопасного обмена NFT подарками среди пользователей Telegram'a.</b>
 
@@ -135,14 +160,14 @@ def handle_message(message):
 <b>🤝 Желаем отличных обменов!</b>
         """
         buttons = [[
-            {"text": "❓ КАК ПРОХОДИТ СДЕЛКА?", "callback_data": "how_deal"},
-            {"text": "🏠 ГЛАВНОЕ МЕНЮ", "callback_data": "main_menu"}
+            {"text": "❓ Как происходит сделка", "callback_data": "how_deal"},
+            {"text": "🏠 Главное меню", "callback_data": "main_menu"}
         ]]
         send_inline_keyboard(chat_id, info_text, buttons)
     
-    elif text == "❓ КАК ПРОХОДИТ СДЕЛКА?":
+    elif text == "❓ Как происходит сделка":
         deal_text = """
-<b>❓ Как проходит сделка в Gift Exchange?</b>
+<b>❓ Как происходит сделка в Gift Exchange?</b>
 
 • <b>Продавец и покупатель обговаривают условия сделки 🤝</b>
 
@@ -161,11 +186,11 @@ def handle_message(message):
 • <b>Сделка завершена успешно! ✅</b>
         """
         buttons = [[
-            {"text": "🏠 ГЛАВНОЕ МЕНЮ", "callback_data": "main_menu"}
+            {"text": "🏠 Главное меню", "callback_data": "main_menu"}
         ]]
         send_inline_keyboard(chat_id, deal_text, buttons)
     
-    elif text == "📞 ТЕХПОДДЕРЖКА":
+    elif text == "📞 Техподдержка":
         support_text = f"""
 <b>📞 Техническая поддержка:</b>
 
@@ -176,17 +201,17 @@ def handle_message(message):
         """
         send_message(chat_id, support_text, main_keyboard())
     
-    elif text == "🏆 ТОП-15 ОБМЕНОВ":
+    elif text == "🏆 Топ-15 обменов":
         if not top_deals:
-            send_message(chat_id, "<b>🏆 ТОП-15 ОБМЕНОВ ПОКА ПУСТ. БУДЬТЕ ПЕРВЫМИ!</b>")
-        else:
-            top_text = "<b>🏆 ТОП-15 ЛУЧШИХ ОБМЕНОВ (от $100 до $300)</b>\n\n"
-            sorted_deals = sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:15]
-            for i, deal in enumerate(sorted_deals, 1):
-                top_text += f"<b>{i}. {deal['user1']} ↔ {deal['user2']} — ${deal['amount']}</b>\n"
-            send_message(chat_id, top_text)
+            # Генерируем рандомный топ-15 при первом запросе
+            top_deals = generate_random_top()
+        
+        top_text = "<b>🏆 ТОП-15 ЛУЧШИХ ОБМЕНОВ (до $400)</b>\n\n"
+        for i, deal in enumerate(top_deals[:15], 1):
+            top_text += f"<b>{i}. {deal['user1']} ↔ {deal['user2']} — ${deal['amount']}</b>\n"
+        send_message(chat_id, top_text)
     
-    elif text == "📝 СОЗДАТЬ СДЕЛКУ":
+    elif text == "📝 Создать сделку":
         users[user_id]['state'] = 'waiting_username'
         users[user_id]['temp_data'] = {}
         send_message(chat_id, "<b>Введите @username второго участника сделки:</b>")
@@ -251,8 +276,8 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
             """
             
             buttons = [[
-                {"text": "✅ ПРИНЯТЬ СДЕЛКУ", "callback_data": f"accept_{deal_id}"},
-                {"text": "❌ ОТМЕНИТЬ", "callback_data": f"cancel_{deal_id}"}
+                {"text": "✅ Принять сделку", "callback_data": f"accept_{deal_id}"},
+                {"text": "❌ Отменить", "callback_data": f"cancel_{deal_id}"}
             ]]
             
             send_inline_keyboard(chat_id, deal_text, buttons)
@@ -271,7 +296,7 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
                     """
                     
                     accept_buttons = [[
-                        {"text": "✅ ПРИНЯТЬ СДЕЛКУ", "callback_data": f"accept_{deal_id}"}
+                        {"text": "✅ Принять сделку", "callback_data": f"accept_{deal_id}"}
                     ]]
                     
                     send_inline_keyboard(user_data['chat_id'], notify_text, accept_buttons)
@@ -302,7 +327,7 @@ https://t.me/{BOT_USERNAME}?start=deal_{deal_id}
             
             if deal['status'] == 'waiting':
                 buttons = [[
-                    {"text": "✅ ПРИНЯТЬ СДЕЛКУ", "callback_data": f"accept_{deal_id}"}
+                    {"text": "✅ Принять сделку", "callback_data": f"accept_{deal_id}"}
                 ]]
                 send_inline_keyboard(chat_id, deal_info, buttons)
             else:
@@ -366,6 +391,7 @@ def handle_callback(callback):
         deal['participant_name'] = username
         deal['status'] = 'in_progress'
         
+        # Добавляем в реальный топ только если сделка состоялась
         if settings['min_amount'] <= deal['amount'] <= settings['max_amount']:
             top_deals.append({
                 'user1': f"@{deal['creator_name']}",
@@ -373,7 +399,7 @@ def handle_callback(callback):
                 'amount': deal['amount'],
                 'date': datetime.now().strftime("%Y-%m-%d")
             })
-            # Простая сортировка без global
+            # Сортируем и оставляем только 15
             sorted_top = sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:15]
             top_deals.clear()
             top_deals.extend(sorted_top)
@@ -410,7 +436,7 @@ def handle_callback(callback):
     
     elif data == "how_deal":
         deal_text = """
-<b>❓ Как проходит сделка в Gift Exchange?</b>
+<b>❓ Как происходит сделка в Gift Exchange?</b>
 
 • <b>Продавец и покупатель обговаривают условия сделки 🤝</b>
 
@@ -456,6 +482,13 @@ def handle_callback(callback):
         
         edit_message(chat_id, message_id, deals_text, admin_keyboard())
     
+    elif data == "admin_random_top" and user_id == ADMIN_ID:
+        random_top = generate_random_top()
+        top_text = "<b>🎲 СГЕНЕРИРОВАН ТОП-15 (РАНДОМ):</b>\n\n"
+        for i, deal in enumerate(random_top[:15], 1):
+            top_text += f"<b>{i}. {deal['user1']} ↔ {deal['user2']} — ${deal['amount']}</b>\n"
+        edit_message(chat_id, message_id, top_text, admin_keyboard())
+    
     elif data == "admin_close" and user_id == ADMIN_ID:
         welcome_text = """
 <b>👋 Приветствуем в проекте «Gift Exchange».</b>
@@ -471,6 +504,10 @@ def main():
     print("🚀 NFT Exchange Bot запущен!")
     print(f"🤖 Бот: @{BOT_USERNAME}")
     print(f"👑 Админ ID: {ADMIN_ID}")
+    
+    # Генерируем рандомный топ-15 при старте
+    generate_random_top()
+    print(f"🏆 Сгенерирован топ-15 с {len(top_deals)} записями")
     
     offset = 0
     while True:
