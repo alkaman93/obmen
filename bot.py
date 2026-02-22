@@ -1,6 +1,3 @@
-# NFT Exchange Bot для iPhone
-# ФИНАЛЬНАЯ ВЕРСИЯ - ИСПРАВЛЕННАЯ
-
 import requests
 import time
 import uuid
