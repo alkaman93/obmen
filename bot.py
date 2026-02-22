@@ -124,6 +124,8 @@ def generate_top_15():
 
 # ОБРАБОТКА СООБЩЕНИЙ
 def handle_message(message):
+    global top_deals
+
     chat_id = message['chat']['id']
     text = message.get('text', '')
     user_id = message['from']['id']
@@ -385,7 +387,6 @@ def handle_message(message):
         return
 
     if text == "🏆 Топ-15 обменов":
-        global top_deals
         if not top_deals:
             top_deals = generate_top_15()
         top_text = "<b>🏆 ТОП-15 ЛУЧШИХ ОБМЕНОВ (до $400)</b>\n\n"
@@ -402,6 +403,8 @@ def handle_message(message):
 
 # ОБРАБОТКА CALLBACK
 def handle_callback(callback):
+    global top_deals
+
     callback_id = callback['id']
     chat_id = callback['message']['chat']['id']
     message_id = callback['message']['message_id']
@@ -436,7 +439,6 @@ def handle_callback(callback):
         deal['participant_name'] = username
         deal['status'] = 'in_progress'
 
-        global top_deals
         top_deals.append({
             'user1': f"@{deal['creator_name']}",
             'user2': f"@{username}",
@@ -559,7 +561,6 @@ def handle_callback(callback):
         return
 
     if data == "admin_refresh_top":
-        global top_deals
         top_deals = generate_top_15()
         text = "<b>🔄 ТОП-15 ОБНОВЛЕН:</b>\n\n"
         for i, deal in enumerate(top_deals[:15], 1):
@@ -574,11 +575,12 @@ def handle_callback(callback):
 
 # ЗАПУСК
 def main():
+    global top_deals
+
     print("🚀 NFT Exchange Bot запущен!")
     print(f"🤖 Бот: @{BOT_USERNAME}")
     print(f"👑 Админ ID: {ADMIN_ID}")
 
-    global top_deals
     top_deals = generate_top_15()
     print(f"🏆 Сгенерирован топ-15 с {len(top_deals)} записями")
 
