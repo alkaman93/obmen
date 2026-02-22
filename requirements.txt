@@ -1,1 +1,2 @@
-requests
+aiogram
+python-dotenv
