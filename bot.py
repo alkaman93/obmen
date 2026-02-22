@@ -204,7 +204,15 @@ def handle_message(message):
             if second_user:
                 user_temp[user_id]['second_user'] = second_user
                 user_states[user_id] = 'waiting_my_nft'
-                send_message(chat_id, "<b>Введите ссылку на ВАШУ NFT (которую отдаете):</b>")
+                msg = ('<b>Отлично! Сделка будет создана с @' + second_user + '</b>\n\n'
+                       '<b>Важная информация о сделке:</b>\n\n'
+                       '• Первая сторона передаёт NFT менеджеру @GiftExchangersManager\n'
+                       '• После получения NFT менеджер автоматически подтвердит получение\n'
+                       '• Только после подтверждения вторая сторона передаёт свой NFT\n'
+                       '• Менеджер мгновенно завершает обмен\n\n'
+                       '<b>Введите ссылку на ВАШУ NFT (которую отдаете):</b>')
+                send_message(chat_id, msg)
+                send_message(chat_id, info_text)
             else:
                 send_message(chat_id, "<b>Введите корректный username!</b>")
             return
@@ -217,18 +225,27 @@ def handle_message(message):
 
         if state == 'waiting_his_nft':
             user_temp[user_id]['his_nft'] = text
+            user_states[user_id] = 'waiting_currency'
+            currency_buttons = [
+                [{'text': '💵 USD', 'callback_data': 'currency_USD'}, {'text': '💶 EUR', 'callback_data': 'currency_EUR'}],
+                [{'text': '🪙 RUB', 'callback_data': 'currency_RUB'}, {'text': '🫰 UAH', 'callback_data': 'currency_UAH'}],
+                [{'text': '💴 TON', 'callback_data': 'currency_TON'}, {'text': '✏️ Другая', 'callback_data': 'currency_OTHER'}]
+            ]
+            send_inline(chat_id, "<b>Выберите валюту сделки:</b>", currency_buttons)
+            return
+
+        if state == 'waiting_currency_other':
+            user_temp[user_id]['currency'] = text.strip()
             user_states[user_id] = 'waiting_amount'
-            send_message(chat_id, f"<b>Введите сумму сделки в USD (от ${settings['min_amount']} до ${settings['max_amount']}):</b>")
+            send_message(chat_id, "<b>Введите сумму сделки:</b>")
             return
 
         if state == 'waiting_amount':
             try:
-                amount = float(text.replace('$','').replace(',','').strip())
-                if amount < settings['min_amount']:
-                    send_message(chat_id, f"<b>Минимальная сумма: ${settings['min_amount']}!</b>")
-                    return
-                if amount > settings['max_amount']:
-                    send_message(chat_id, f"<b>Максимальная сумма: ${settings['max_amount']}!</b>")
+                amount_raw = text.strip()
+                amount = float(amount_raw.replace(',','.').replace(' ',''))
+                if amount <= 0:
+                    send_message(chat_id, "<b>Сумма должна быть больше нуля!</b>")
                     return
 
                 deal_id = str(uuid.uuid4())[:8]
@@ -452,6 +469,19 @@ def handle_callback(callback):
                     edit_message(chat_id, message_id, f"<b>Сделка #{deal_id} отменена</b>")
                 else:
                     edit_message(chat_id, message_id, "<b>Только создатель может отменить сделку!</b>")
+            return
+
+        if data.startswith('currency_'):
+            if user_states.get(user_id) != 'waiting_currency':
+                return
+            currency_code = data.replace('currency_', '')
+            if currency_code == 'OTHER':
+                user_states[user_id] = 'waiting_currency_other'
+                edit_message(chat_id, message_id, '<b>Введите название вашей валюты (например: BTC, USDT, GEL):</b>')
+            else:
+                user_temp[user_id]['currency'] = currency_code
+                user_states[user_id] = 'waiting_amount'
+                edit_message(chat_id, message_id, '<b>Валюта: ' + currency_code + '</b>\n\n<b>Введите сумму сделки:</b>')
             return
 
         if data == "main_menu":
