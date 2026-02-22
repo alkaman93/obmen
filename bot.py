@@ -5,7 +5,7 @@ import random
 from datetime import datetime
 
 # ===== НАСТРОЙКИ =====
-TOKEN = "8487741416:AAGbFLHfafBs6ChN95VhUrqzs5W_o6SfNrY"
+TOKEN = 8487741416:AAGh0El8tqcmycs0960sMpOvBJwumV5DQOA
 ADMIN_ID = 174415647
 SUPPORT = "GiftExchangersSupport"
 MANAGER = "GiftExchangersManager"
