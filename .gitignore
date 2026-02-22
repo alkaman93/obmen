@@ -1,18 +1,11 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+# Файлы с секретами
 .env
+config/local.py
+*.token
+secrets.py
+
+# Папки с зависимостями (чтоб не засорять репозиторий)
 venv/
 env/
-*.log
-
-# IDE
-.vscode/
-.idea/
-
-# Бот
-bot.session
-database.db
-*.db
+__pycache__/
+*.pyc
