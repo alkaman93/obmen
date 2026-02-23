@@ -136,6 +136,7 @@ def generate_top_15():
 
 # ===== ОБРАБОТКА СООБЩЕНИЙ =====
 def handle_message(message):
+    global top_deals  # объявляем в начале функции
     chat_id = message['chat']['id']
     text = message.get('text', '')
     user_id = message['from']['id']
@@ -292,7 +293,6 @@ def handle_message(message):
         return
 
     if text == "🏆 Топ-15 обменов":
-        global top_deals
         if not top_deals:
             top_deals = generate_top_15()
         top_text = "🏆 <b>ТОП-15 ЛУЧШИХ ОБМЕНОВ</b>\n\n"
@@ -434,6 +434,7 @@ def _how_deal_text():
 
 # ===== ОБРАБОТКА КНОПОК =====
 def handle_callback(callback):
+    global top_deals  # объявляем в самом начале функции
     callback_id = callback['id']
     chat_id = callback['message']['chat']['id']
     message_id = callback['message']['message_id']
@@ -466,7 +467,6 @@ def handle_callback(callback):
         deal['status'] = 'in_progress'
 
         # 🏆 Добавляем в топ
-        global top_deals
         top_deals.append({
             'user1': f"@{deal['creator_name']}",
             'user2': f"@{username}",
@@ -581,7 +581,6 @@ def handle_callback(callback):
         return
 
     if data == "admin_refresh_top":
-        global top_deals
         top_deals = generate_top_15()
         text = "🔄 <b>ТОП-15 ОБНОВЛЁН:</b>\n\n"
         for i, deal in enumerate(top_deals[:15], 1):
