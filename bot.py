@@ -117,7 +117,23 @@ def edit_message(chat_id, message_id, text, buttons=None, parse_mode="HTML"):
     except:
         pass
 
+# ===== МАСКИРОВКА USERNAME =====
+def mask_username(username):
+    """@Alice42 → @Al***"""
+    name = username.lstrip("@")
+    if len(name) <= 2:
+        return f"@{"*" * len(name)}"
+    return f"@{name[:2]}{"*" * (len(name) - 2)}"
+
 # ===== ГЕНЕРАЦИЯ ТОП-15 =====
+def mask_username(username):
+    """Замазываем середину ника: @Alice23 → @Al***23"""
+    name = username.replace('@', '')
+    if len(name) <= 3:
+        return f"@{'*' * len(name)}"
+    visible = max(2, len(name) // 3)
+    return f"@{name[:visible]}{'*' * (len(name) - visible * 2)}{name[-visible:]}"
+
 def generate_top_15():
     names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Henry", "Ivy", "Jack"]
     top = []
@@ -298,7 +314,7 @@ def handle_message(message):
         top_text = "🏆 <b>ТОП-15 ЛУЧШИХ ОБМЕНОВ</b>\n\n"
         for i, deal in enumerate(top_deals[:15], 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-            top_text += f"{medal} {deal['user1']} ↔ {deal['user2']} — <b>${deal['amount']}</b>\n"
+            top_text += f"{medal} {mask_username(deal['user1'])} ↔ {mask_username(deal['user2'])} — <b>${deal['amount']}</b>\n"
         send_message(chat_id, top_text)
         return
 
@@ -585,7 +601,7 @@ def handle_callback(callback):
         text = "🔄 <b>ТОП-15 ОБНОВЛЁН:</b>\n\n"
         for i, deal in enumerate(top_deals[:15], 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-            text += f"{medal} {deal['user1']} ↔ {deal['user2']} — <b>${deal['amount']}</b>\n"
+            text += f"{medal} {mask_username(deal['user1'])} ↔ {mask_username(deal['user2'])} — <b>${deal['amount']}</b>\n"
         edit_message(chat_id, message_id, text, admin_inline_buttons())
         return
 
@@ -596,9 +612,9 @@ def handle_callback(callback):
 # ===== ЗАПУСК =====
 def main():
     print("🚀 NFT Exchange Bot запущен!")
+    global top_deals
     print(f"🤖 @{BOT_USERNAME}  |  👑 Admin ID: {ADMIN_ID}")
 
-    global top_deals
     top_deals = generate_top_15()
     print(f"🏆 Топ-15 сгенерирован ({len(top_deals)} записей)")
 
