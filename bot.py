@@ -47,6 +47,28 @@ def answer_callback(callback_id, text=None):
         data["text"] = text
     tg_request("answerCallbackQuery", data)
 
+def mask_username(username):
+    """Скрывает середину юзернейма: @We***hs"""
+    name = username.lstrip('@')
+    if len(name) <= 4:
+        return f"@{name[0]}***"
+    visible_start = name[:2]
+    visible_end = name[-2:]
+    return f"@{visible_start}***{visible_end}"
+
+def mask_username(username):
+    """Маскирует username: @Webhook -> @We***hs"""
+    name = username.lstrip('@')
+    if len(name) <= 4:
+        return f"@{name[0]}***"
+    visible_start = name[:2]
+    visible_end = name[-2:]
+    return f"@{visible_start}***{visible_end}"
+
+def make_deep_link(deal_id):
+    """Создаёт рабочую Telegram deep link на сделку"""
+    return f"https://t.me/{BOT_USERNAME}?start=deal_{deal_id}"
+
 # ===== КЛАВИАТУРЫ =====
 def main_keyboard():
     return {
@@ -222,7 +244,7 @@ def handle_message(message):
                     f"<b>🎁 Его NFT:</b> {his_nft}\n"
                     f"<b>💰 Сумма:</b> ${amount}\n\n"
                     f"<b>🔗 Ссылка на сделку:</b>\n"
-                    f"https://t.me/{BOT_USERNAME}?start=deal_{deal_id}"
+                    f"https://t.me/{BOT_USERNAME}?start=dealid{deal_id}"
                 )
 
                 buttons = [[
@@ -238,7 +260,7 @@ def handle_message(message):
                             f"<b>Пользователь @{username} создал сделку с вами!</b>\n\n"
                             f"<b>🆔 Номер:</b> <code>{deal_id}</code>\n"
                             f"<b>💰 Сумма:</b> ${amount}\n\n"
-                            f"<b>🔗 Ссылка:</b> https://t.me/{BOT_USERNAME}?start=deal_{deal_id}"
+                            f"<b>🔗 Ссылка:</b> https://t.me/{BOT_USERNAME}?start=dealid{deal_id}"
                         )
                         accept_buttons = [[{"text": "✅ Принять сделку", "callback_data": f"accept_{deal_id}"}]]
                         send_inline(user_data['chat_id'], notify_text, accept_buttons)
@@ -320,8 +342,8 @@ def handle_message(message):
         send_message(chat_id, settings['banner_text'], main_keyboard())
         return
 
-    if text.startswith('/start deal_'):
-        deal_id = text.replace('/start deal_', '').strip()
+    if text.startswith('/start dealid'):
+        deal_id = text.replace('/start dealid', '').strip()
         if deal_id in deals:
             deal = deals[deal_id]
             status_map = {'waiting': '⏳ Ожидает', 'in_progress': '🔄 В процессе', 'cancelled': '❌ Отменена', 'completed': '✅ Завершена'}
@@ -405,7 +427,9 @@ def handle_message(message):
             top_deals = generate_top_15()
         top_text = "<b>🏆 ТОП-15 ЛУЧШИХ ОБМЕНОВ (до $400)</b>\n\n"
         for i, deal in enumerate(top_deals[:15], 1):
-            top_text += f"<b>{i}. {deal['user1']} ↔ {deal['user2']} — ${deal['amount']}</b>\n"
+            u1 = mask_username(deal['user1'])
+            u2 = mask_username(deal['user2'])
+            top_text += f"<b>{i}. {u1} ↔ {u2} — ${deal['amount']}</b>\n"
         send_message(chat_id, top_text)
         return
 
@@ -578,7 +602,9 @@ def handle_callback(callback):
         top_deals = generate_top_15()
         refresh_text = "<b>🔄 ТОП-15 ОБНОВЛЕН:</b>\n\n"
         for i, deal in enumerate(top_deals[:15], 1):
-            refresh_text += f"<b>{i}. {deal['user1']} ↔ {deal['user2']} — ${deal['amount']}</b>\n"
+            u1 = mask_username(deal['user1'])
+            u2 = mask_username(deal['user2'])
+            refresh_text += f"<b>{i}. {u1} ↔ {u2} — ${deal['amount']}</b>\n"
         edit_message(chat_id, message_id, refresh_text, admin_inline_keyboard())
         return
 
