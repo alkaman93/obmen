@@ -130,9 +130,11 @@ def mask_username(username):
     """Замазываем середину ника: @Alice23 → @Al***23"""
     name = username.replace('@', '')
     if len(name) <= 3:
-        return f"@{'*' * len(name)}"
+        stars = '*' * len(name)
+        return f"@{stars}"
     visible = max(2, len(name) // 3)
-    return f"@{name[:visible]}{'*' * (len(name) - visible * 2)}{name[-visible:]}"
+    stars = '*' * (len(name) - visible * 2)
+    return f"@{name[:visible]}{stars}{name[-visible:]}"
 
 def generate_top_15():
     names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Henry", "Ivy", "Jack"]
