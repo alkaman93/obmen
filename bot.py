@@ -8,13 +8,13 @@ import random
 from datetime import datetime
 
 # ===== НАСТРОЙКИ =====
-TOKEN = "8487741416:AAGbFLHfafBs6ChN95VhUrqzs5W_o6SfNrY"
-ADMIN_ID = 174415647
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
 SUPPORT = "GiftExchangersSupport"
 MANAGER = "GiftExchangersManager"
-BOT_USERNAME = "GiftExchangersBot"
+BOT_USERNAME = "GiftExchagersBot"
 
-# ===== ХРАНИЛИЩЕ ДАННЫХ =====
+# ===== НАСТРОЙКИ =====
 deals = {}
 top_deals = []
 users = {}
