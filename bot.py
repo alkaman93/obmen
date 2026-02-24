@@ -1,6 +1,7 @@
 # NFT Exchange Bot для iPhone
 # ФИНАЛЬНАЯ ВЕРСИЯ - ИСПРАВЛЕННАЯ
 
+import os
 import requests
 import time
 import uuid
@@ -8,13 +9,13 @@ import random
 from datetime import datetime
 
 # ===== НАСТРОЙКИ =====
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
+TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 SUPPORT = "GiftExchangersSupport"
 MANAGER = "GiftExchangersManager"
 BOT_USERNAME = "GiftExchagersBot"
 
-# ===== НАСТРОЙКИ =====
+# ===== ДАННЫЕ =====
 deals = {}
 top_deals = []
 users = {}
@@ -128,6 +129,8 @@ def generate_top_15():
 
 # ===== ОБРАБОТКА СООБЩЕНИЙ =====
 def handle_message(message):
+    global top_deals  # ИСПРАВЛЕНО: global в самом начале функции
+
     chat_id = message['chat']['id']
     text = message.get('text', '')
     user_id = message['from']['id']
@@ -148,7 +151,6 @@ def handle_message(message):
     if user_id in user_states:
         state = user_states[user_id]
 
-        # --- Состояния создания сделки ---
         if state == 'waiting_username':
             second_user = text.replace('@', '').strip()
             if second_user:
@@ -216,7 +218,6 @@ def handle_message(message):
                 ]]
                 send_inline(chat_id, deal_text, buttons)
 
-                # Уведомляем второго участника если он есть в боте
                 for uid, user_data in users.items():
                     if user_data.get('username', '').lower() == second_user.lower():
                         notify_text = (
@@ -237,7 +238,6 @@ def handle_message(message):
                 send_message(chat_id, "<b>❌ Введите число!</b>")
             return
 
-        # --- Состояния админ-панели ---
         if state == 'admin_broadcast' and user_id == ADMIN_ID:
             del user_states[user_id]
             sent = 0
@@ -283,7 +283,7 @@ def handle_message(message):
 
         if state == 'admin_banner' and user_id == ADMIN_ID:
             del user_states[user_id]
-            settings['banner_text'] = text  # Сохраняем ровно то что написал админ
+            settings['banner_text'] = text
             send_message(chat_id, f"<b>✅ Баннер обновлен!</b>\n\n<b>Новый баннер:</b>\n{text}")
             return
 
@@ -388,7 +388,6 @@ def handle_message(message):
         return
 
     if text == "🏆 Топ-15 обменов":
-        global top_deals
         if not top_deals:
             top_deals = generate_top_15()
         top_text = "<b>🏆 ТОП-15 ЛУЧШИХ ОБМЕНОВ (до $400)</b>\n\n"
@@ -405,6 +404,8 @@ def handle_message(message):
 
 # ===== ОБРАБОТКА CALLBACK КНОПОК =====
 def handle_callback(callback):
+    global top_deals  # ИСПРАВЛЕНО: global в самом начале функции
+
     callback_id = callback['id']
     chat_id = callback['message']['chat']['id']
     message_id = callback['message']['message_id']
@@ -412,7 +413,6 @@ def handle_callback(callback):
     user_id = callback['from']['id']
     username = callback['from'].get('username', 'NoUsername')
 
-    # Всегда отвечаем на callback (убирает "часики" с кнопки)
     answer_callback(callback_id)
 
     if data.startswith('accept_'):
@@ -440,8 +440,6 @@ def handle_callback(callback):
         deal['participant_name'] = username
         deal['status'] = 'in_progress'
 
-        # Добавляем в топ
-        global top_deals
         top_deals.append({
             'user1': f"@{deal['creator_name']}",
             'user2': f"@{username}",
@@ -450,7 +448,6 @@ def handle_callback(callback):
         })
         top_deals = sorted(top_deals, key=lambda x: x['amount'], reverse=True)[:15]
 
-        # Уведомляем создателя
         send_message(
             deal['creator_id'],
             f"<b>✅ @{username} принял вашу сделку!</b>\n\n"
@@ -476,7 +473,6 @@ def handle_callback(callback):
         return
 
     if data == "main_menu":
-        # Удаляем inline сообщение и отправляем меню
         delete_message(chat_id, message_id)
         send_message(chat_id, settings['banner_text'], main_keyboard())
         return
@@ -547,8 +543,7 @@ def handle_callback(callback):
         edit_message(
             chat_id,
             message_id,
-            f"<b>💰 Введите максимальную сумму\nНапример: 500\n\n"
-            f"Текущий максимум: ${settings['max_amount']}</b>"
+            f"<b>💰 Введите максимальную сумму\nНапример: 500\n\nТекущий максимум: ${settings['max_amount']}</b>"
         )
         return
 
@@ -556,23 +551,22 @@ def handle_callback(callback):
         if not deals:
             edit_message(chat_id, message_id, "<b>📭 Нет сделок</b>", admin_inline_keyboard())
             return
-        text = "<b>📋 ВСЕ СДЕЛКИ (последние 10):</b>\n\n"
+        deals_text = "<b>📋 ВСЕ СДЕЛКИ (последние 10):</b>\n\n"
         status_icons = {'waiting': '⏳', 'in_progress': '🔄', 'cancelled': '❌', 'completed': '✅'}
         for deal_id, deal in list(deals.items())[-10:]:
             icon = status_icons.get(deal['status'], '❓')
-            text += f"{icon} <code>{deal_id}</code>: @{deal['creator_name']} → @{deal['second_user']} (${deal['amount']})\n"
+            deals_text += f"{icon} <code>{deal_id}</code>: @{deal['creator_name']} → @{deal['second_user']} (${deal['amount']})\n"
         if len(deals) > 10:
-            text += f"\n<b>...и еще {len(deals) - 10} сделок</b>"
-        edit_message(chat_id, message_id, text, admin_inline_keyboard())
+            deals_text += f"\n<b>...и еще {len(deals) - 10} сделок</b>"
+        edit_message(chat_id, message_id, deals_text, admin_inline_keyboard())
         return
 
     if data == "admin_refresh_top":
-        global top_deals
         top_deals = generate_top_15()
-        text = "<b>🔄 ТОП-15 ОБНОВЛЕН:</b>\n\n"
+        refresh_text = "<b>🔄 ТОП-15 ОБНОВЛЕН:</b>\n\n"
         for i, deal in enumerate(top_deals[:15], 1):
-            text += f"<b>{i}. {deal['user1']} ↔ {deal['user2']} — ${deal['amount']}</b>\n"
-        edit_message(chat_id, message_id, text, admin_inline_keyboard())
+            refresh_text += f"<b>{i}. {deal['user1']} ↔ {deal['user2']} — ${deal['amount']}</b>\n"
+        edit_message(chat_id, message_id, refresh_text, admin_inline_keyboard())
         return
 
     if data == "admin_close":
@@ -582,16 +576,16 @@ def handle_callback(callback):
 
 # ===== ЗАПУСК =====
 def main():
+    global top_deals  # ИСПРАВЛЕНО: global в начале функции
+
     print("🚀 NFT Exchange Bot запущен!")
     print(f"🤖 Бот: @{BOT_USERNAME}")
     print(f"👑 Админ ID: {ADMIN_ID}")
     print(f"🔑 Токен: {TOKEN[:10]}...")
 
-    global top_deals
     top_deals = generate_top_15()
     print(f"🏆 Сгенерирован топ-15 с {len(top_deals)} записями")
 
-    # Сбрасываем webhook если есть
     tg_request("deleteWebhook", {})
 
     offset = 0
