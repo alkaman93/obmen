@@ -119,14 +119,6 @@ def edit_message(chat_id, message_id, text, buttons=None, parse_mode="HTML"):
 
 # ===== МАСКИРОВКА USERNAME =====
 def mask_username(username):
-    """@Alice42 → @Al***"""
-    name = username.lstrip("@")
-    if len(name) <= 2:
-        return f"@{"*" * len(name)}"
-    return f"@{name[:2]}{"*" * (len(name) - 2)}"
-
-# ===== ГЕНЕРАЦИЯ ТОП-15 =====
-def mask_username(username):
     """Замазываем середину ника: @Alice23 → @Al***23"""
     name = username.replace('@', '')
     if len(name) <= 3:
